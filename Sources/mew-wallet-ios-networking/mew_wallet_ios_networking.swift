@@ -6,19 +6,13 @@ public enum SomeError: Error {
 }
 
 public struct mew_wallet_ios_networking {
-  public private(set) var text = "Hello, World!"
-  
   public init() {
-    // make a call
-    // then map
-    
   }
   
   var currentTask: Task<Void, Never>?
   
   func runNetworkCall(config: Any?) -> AnyPublisher<Any, Error> {
     let publisher = PassthroughSubject<Any, Error>()
-    debugPrint("run me")
     Task {
       enum MEWPath: NetworkPath {
         case v2_stake_info
@@ -54,9 +48,8 @@ public struct mew_wallet_ios_networking {
           return
         }
       } while i < 10
-      // build
       
-      
+      // Build request
       let requestModel = RequestModel()
         .networkPath(path: MEWPath.v2_stake_info)
         .method(.get)
@@ -69,47 +62,14 @@ public struct mew_wallet_ios_networking {
       // do while not cancelled or error?
       let response = try await task_network.process(request)
       let model: ResponseStruct = try await task_deserialize.process(response)
-      debugPrint(model)
+      publisher.send(model)
       
-      // FOR SOCKET:
-//      @State private var currentTask: Task<Void, Never>?
-//      private func loadInfo() {
-//              currentTask = Task {
-//                  async let info = someOtherAsyncFunc()
-//                  self.info = try? await info
-//                  await Task.sleep(5_000_000_000)
-//                  guard !Task.isCancelled else { return }
-//                  loadInfo()
-//              }
-//          }
-//
-//          private func cancelTask() {
-//              print("Disappear")
-//              currentTask?.cancel()
-//          }
-      
-      
-      // few awaits
-      // build request with config
-      // execute request (yeald?)
-      // deserialize response
-      // ...
-      // done
-      
-      
-//      debugPrint("start")
-//      let request = URLRequest(url: URL(string: "https://google.com")!)
-//      let dataTask = URLSession.shared.dataTask(with: request)
-////      let result = try await URLSession.shared.data(for: request)
-//      debugPrint("done")
       try await Task.sleep(nanoseconds: 9000000000)
       
       publisher.send(1)
       publisher.send(completion: .finished)
     }
     return publisher.eraseToAnyPublisher()
-    
-//    debugPrint(await try? task.get())
   }
 }
 
@@ -190,20 +150,6 @@ final class RepeatingTask {
       guard !Task.isCancelled else { return }
       self._process(value: arc4random())
       runInternalTask()
-      //      private func loadInfo() {
-      //              currentTask = Task {
-      //                  async let info = someOtherAsyncFunc()
-      //                  self.info = try? await info
-      //                  await Task.sleep(5_000_000_000)
-      //                  guard !Task.isCancelled else { return }
-      //                  loadInfo()
-      //              }
-      //          }
-      //
-      //          private func cancelTask() {
-      //              print("Disappear")
-      //              currentTask?.cancel()
-      //          }
     }
   }
   
@@ -232,12 +178,6 @@ final class RepeatingTask {
 // convert response?
 // map response ->
 // return response
-
-//extension URLSession {
-//  func data(for: URLRequest) async throws -> (Data, URLResponse) {
-//
-//  }
-//}
 
 struct ResponseStruct: Decodable {
   let total_staked: String
