@@ -40,18 +40,64 @@ public struct NetworkRequestConfig {
     case custom(NetworkResponseMapper)
   }
   
-  let request: Request
-  let client: NetworkClient
-  let deserialization: Deserialization
-  let validation: Validation
-  let conversion: Conversion
-  let mapping: Mapping
+  var request: Request
+  var client: NetworkClient
+  var deserialization: Deserialization
+  var validation: Validation
+  var conversion: Conversion
+  var mapping: Mapping
   
-  // Build request ->
-  // execute request ->
-  // deserialize response? ->
-  // validate response? ->
-  // convert response?
-  // map response ->
-  // return response
+  // MARK: - Init
+  
+  public init(request: Request,
+              client: NetworkClient,
+              deserialization: Deserialization = .disable,
+              validation: Validation = .disable,
+              conversion: Conversion = .disable,
+              mapping: Mapping = .disable) {
+    self.request = request
+    self.client = client
+    self.deserialization = deserialization
+    self.validation = validation
+    self.conversion = conversion
+    self.mapping = mapping
+  }
+  
+  // MARK: - Modifiers
+  
+  public func request(_ request: Request) -> Self {
+    var `self` = self
+    `self`.request = request
+    return `self`
+  }
+  
+  public func client(_ client: NetworkClient) -> Self {
+    var `self` = self
+    `self`.client = client
+    return `self`
+  }
+  
+  public func deserialization(_ deserialization: Deserialization) -> Self {
+    var `self` = self
+    `self`.deserialization = deserialization
+    return `self`
+  }
+  
+  public func validation(_ validation: Validation) -> Self {
+    var `self` = self
+    `self`.validation = validation
+    return `self`
+  }
+  
+  public func conversion(_ conversion: Conversion) -> Self {
+    var `self` = self
+    `self`.conversion = conversion
+    return `self`
+  }
+  
+  public func mapping(_ mapping: Mapping) -> Self {
+    var `self` = self
+    `self`.mapping = mapping
+    return `self`
+  }
 }

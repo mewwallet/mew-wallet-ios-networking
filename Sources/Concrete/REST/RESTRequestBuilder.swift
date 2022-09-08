@@ -43,7 +43,7 @@ final class RESTRequestBuilder: NetworkRequestBuilder {
     }
     
     if let path = config.networkPath?.path { components.path = path.hasPrefix("/") ? path : "/" + path }
-    if let queryItems = config.networkPath?.query { components.queryItems = queryItems }
+    if let queryItems = try config.networkPath?.query { components.queryItems = queryItems }
     guard let url = components.url else { throw BuilderError.invalidURL }
     var request = URLRequest(url: url)
     if let body = config.body { request.httpBody = body }

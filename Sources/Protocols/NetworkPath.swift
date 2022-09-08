@@ -9,5 +9,5 @@ import Foundation
 
 public protocol NetworkPath {
   var path: String { get }
-  var query: [URLQueryItem]? { get }
+  var query: [URLQueryItem]? { get throws }
 }

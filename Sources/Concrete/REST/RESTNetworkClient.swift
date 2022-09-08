@@ -18,7 +18,7 @@ public final class RESTClient: NetworkClient {
     self.session = session
   }
   
-  func send(request: NetworkRequest) async throws -> NetworkResponse {
+  public func send(request: NetworkRequest) async throws -> NetworkResponse {
     guard let request = request.request as? URLRequest else { throw NetworkClientError.invalidRequest }
     let (data, response) = try await session.safeData(for: request)
     if let response = response as? HTTPURLResponse {

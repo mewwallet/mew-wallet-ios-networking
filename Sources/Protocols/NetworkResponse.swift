@@ -19,6 +19,14 @@ public enum NetworkResponseCode {
     default:    self = .unknown(rawValue)
     }
   }
+  
+  public var code: Int {
+    switch self {
+    case .success:            return 200
+    case .notFound:           return 404
+    case .unknown(let code):  return code
+    }
+  }
 }
 
 public protocol NetworkResponse {

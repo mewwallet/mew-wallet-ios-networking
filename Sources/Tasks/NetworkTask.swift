@@ -7,14 +7,22 @@
 
 import Foundation
 
-final class NetworkTask {
-  enum NetworkTaskError: Error {
+public final class NetworkTask {
+  enum NetworkTaskError: Error, LocalizedError {
     case badIntermediateState
+    case badCode(Int, String)
+    
+    var errorDescription: String? {
+      switch self {
+      case .badIntermediateState:         return "Bad intermediate state"
+      case .badCode(_, let description):  return description
+      }
+    }
   }
   
-  static let shared = NetworkTask()
+  public static let shared = NetworkTask()
   
-  func run(config: NetworkRequestConfig) async throws -> Any? {
+  public func run(config: NetworkRequestConfig) async throws -> Any? {
     return try await withCheckedThrowingContinuation { continuation in
       Task {
         do {
@@ -34,6 +42,13 @@ final class NetworkTask {
           /// Execute the request
           let request = try await task_build.process(config.request.model)
           let response = try await task_request.process(request)
+          guard case .success = response.statusCode else {
+            if let body = response.data as? Data {
+              throw NetworkTaskError.badCode(response.statusCode.code, String(data: body, encoding: .utf8) ?? "Unknown")
+            } else {
+              throw NetworkTaskError.badCode(response.statusCode.code, "No response")
+            }
+          }
           
           /// Deserialization
           let deserialized: Any

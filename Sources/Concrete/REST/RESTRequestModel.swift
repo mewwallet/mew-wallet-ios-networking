@@ -12,22 +12,25 @@ public struct RESTRequestModel: NetworkRequestModel {
   public enum Method: RawRepresentable {
     public var rawValue: String {
       switch self {
-      case .get: return "GET"
-      case .post: return "POST"
-      case .custom(let method): return method
+      case .get:                  return "GET"
+      case .post:                 return "POST"
+      case .put:                  return "PUT"
+      case .custom(let method):   return method
       }
     }
     
     public init(rawValue: String) {
       switch rawValue {
-      case "GET": self = .get
-      case "POST": self = .post
-      default: self = .custom(rawValue)
+      case "GET":                 self = .get
+      case "POST":                self = .post
+      case "PUT":                 self = .put
+      default:                    self = .custom(rawValue)
       }
     }
     
     case get
     case post
+    case put
     case custom(String)
   }
   
@@ -69,5 +72,17 @@ public struct RESTRequestModel: NetworkRequestModel {
     var `self` = self
     `self`.self.headers = headers
     return `self`
+  }
+  
+  public init(baseURL: URL? = nil,
+              networkPath: NetworkPath? = nil,
+              method: Method = .get,
+              headers: [String:String?]? = nil,
+              body: Data? = nil) {
+    self.baseURL = baseURL
+    self.networkPath = networkPath
+    self.method = method
+    self.headers = headers
+    self.body = body
   }
 }
