@@ -6,3 +6,12 @@
 //
 
 import Foundation
+
+public struct SocketRequestModel: NetworkRequestModel {
+  public var body: Any?
+  public init(
+    body: Any? = nil
+  ) {
+    self.body = body
+  }
+}

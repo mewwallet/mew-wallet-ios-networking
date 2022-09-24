@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 public final class NetworkTask {
   enum NetworkTaskError: Error, LocalizedError {
@@ -32,8 +33,7 @@ public final class NetworkTask {
           case .rest:
             builder = try RESTRequestBuilder()
           case .socket:
-            // FIXME: builder
-            builder = try RESTRequestBuilder()
+            builder = SocketRequestBuilder()
           }
           
           let task_build = try TaskBuildNetworkRequest(builder: builder)
@@ -42,67 +42,82 @@ public final class NetworkTask {
           /// Execute the request
           let request = try await task_build.process(config.request.model)
           let response = try await task_request.process(request)
-          guard case .success = response.statusCode else {
-            if let body = response.data as? Data {
-              throw NetworkTaskError.badCode(response.statusCode.code, String(data: body, encoding: .utf8) ?? "Unknown")
-            } else {
-              throw NetworkTaskError.badCode(response.statusCode.code, "No response")
-            }
+          if let publisher = response as? AnyPublisher<Result<NetworkResponse, Error>, Never> {
+            let mapped = publisher
+              .asyncMap { [weak self] response -> Any? in
+                switch response {
+                case .success(let response):
+                  return try await self?.process(networkResponse:response, config:config)
+                case .failure(let error):
+                  throw error
+                }
+              }
+            continuation.resume(returning: mapped)
+          } else if let response = response as? NetworkResponse {
+            let result = try await process(networkResponse: response, config: config)
+            continuation.resume(returning: result)
           }
-          
-          /// Deserialization
-          let deserialized: Any
-          switch config.deserialization {
-          case .disable:
-            // TODO: Throw an error?
-            guard let data = response.data else {
-              continuation.resume(throwing: NetworkTaskError.badIntermediateState)
-              return
-            }
-            deserialized = data
-          case .custom(let deserializer):
-            let task_deserialization = TaskDeserialization(deserializer: deserializer)
-            deserialized = try await task_deserialization.process(response)
-          }
-          
-          /// Validation
-          switch config.validation {
-          case .disable:
-            break
-          case .custom(let validator):
-            let task_validation = TaskResponseValidation(validator: validator)
-            try await task_validation.process(deserialized)
-          }
-          
-          /// Convertion
-          let converted: Any?
-          switch config.conversion {
-          case .disable:
-            converted = deserialized
-          case .custom(let converter):
-            let task_convertion = TaskResponseConvertion(converter: converter)
-            converted = try await task_convertion.process(deserialized)
-          }
-          
-          /// Mapping
-          let result: Any?
-          switch config.mapping {
-          case .disable:
-            result = converted
-          case .custom(let mapper):
-            let task_mapping = TaskResponseMapping(mapper: mapper)
-            guard let converted = converted else {
-              continuation.resume(throwing: NetworkTaskError.badIntermediateState)
-              return
-            }
-            result = try await task_mapping.process(converted)
-          }
-          
-          continuation.resume(returning: result)
         } catch {
           continuation.resume(throwing: error)
         }
       }
     }
+  }
+  
+  private func process(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> Any? {
+    guard case .success = networkResponse.statusCode else {
+      if let body = networkResponse.data as? Data {
+        throw NetworkTaskError.badCode(networkResponse.statusCode.code, String(data: body, encoding: .utf8) ?? "Unknown")
+      } else {
+        throw NetworkTaskError.badCode(networkResponse.statusCode.code, "No response")
+      }
+    }
+    
+    /// Deserialization
+    let deserialized: Any
+    switch config.deserialization {
+    case .disable:
+      // TODO: Throw an error?
+      guard let data = networkResponse.data else {
+        throw NetworkTaskError.badIntermediateState
+      }
+      deserialized = data
+    case .custom(let deserializer):
+      let task_deserialization = TaskDeserialization(deserializer: deserializer)
+      deserialized = try await task_deserialization.process(networkResponse)
+    }
+    
+    /// Validation
+    switch config.validation {
+    case .disable:
+      break
+    case .custom(let validator):
+      let task_validation = TaskResponseValidation(validator: validator)
+      try await task_validation.process(deserialized)
+    }
+    
+    /// Convertion
+    let converted: Any?
+    switch config.conversion {
+    case .disable:
+      converted = deserialized
+    case .custom(let converter):
+      let task_convertion = TaskResponseConvertion(converter: converter)
+      converted = try await task_convertion.process(deserialized)
+    }
+    
+    /// Mapping
+    let result: Any?
+    switch config.mapping {
+    case .disable:
+      result = converted
+    case .custom(let mapper):
+      let task_mapping = TaskResponseMapping(mapper: mapper)
+      guard let converted = converted else {
+        throw NetworkTaskError.badIntermediateState
+      }
+      result = try await task_mapping.process(converted)
+    }
+    return result
   }
 }

@@ -6,7 +6,8 @@
 //
 
 import Foundation
+import Combine
 
 public protocol NetworkClient {
-  func send(request: NetworkRequest) async throws -> NetworkResponse
+  func send(request: NetworkRequest) async throws -> Any
 }

@@ -6,3 +6,15 @@
 //
 
 import Foundation
+
+// newHeads provide in socket request to check if there is an active subscription
+
+struct SocketRequest: NetworkRequest {
+  // MARK: - NetworkRequest
+  
+  var request: Any?
+  
+  init(request: Any?) {
+    self.request = request
+  }
+}

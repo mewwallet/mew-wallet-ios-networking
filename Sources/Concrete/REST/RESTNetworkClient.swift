@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 public final class RESTClient: NetworkClient {
   enum NetworkClientError: Error {
@@ -18,7 +19,7 @@ public final class RESTClient: NetworkClient {
     self.session = session
   }
   
-  public func send(request: NetworkRequest) async throws -> NetworkResponse {
+  public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request.request as? URLRequest else { throw NetworkClientError.invalidRequest }
     let (data, response) = try await session.safeData(for: request)
     if let response = response as? HTTPURLResponse {

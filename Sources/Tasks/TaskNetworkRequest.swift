@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 final class TaskNetworkRequest {
   let client: NetworkClient
@@ -14,7 +15,7 @@ final class TaskNetworkRequest {
     self.client = client
   }
   
-  func process(_ request: NetworkRequest) async throws -> NetworkResponse {
+  func process(_ request: NetworkRequest) async throws -> Any {
     return try await client.send(request: request)
   }
 }
