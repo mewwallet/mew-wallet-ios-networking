@@ -1,7 +1,7 @@
 import Foundation
 import mew_wallet_ios_extensions
 
-protocol SocketDataBuilder {
+public protocol SocketDataBuilder {
   func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest
   func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data)
   func unwrap(data: Data) throws -> (ValueWrapper, Data)
@@ -9,10 +9,10 @@ protocol SocketDataBuilder {
   func unwrap(response: String) throws -> (ValueWrapper?, ValueWrapper?, Data)
 }
 
-final class SocketDataBuilderImpl: SocketDataBuilder {
+public final class SocketDataBuilderImpl: SocketDataBuilder {
   var decoder: JSONDecoder!
 
-  func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest {
+  public func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest {
     var request = URLRequest(url: url)
     headers.forEach {
       request.addValue($0.value, forHTTPHeaderField: $0.key)
@@ -20,7 +20,7 @@ final class SocketDataBuilderImpl: SocketDataBuilder {
     return request
   }
   
-  func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data) {
+  public func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data) {
     if let data = request.request as? Data {
       return try self.unwrap(data: data)
     } else if let request = request.request as? URLRequest {
@@ -33,7 +33,7 @@ final class SocketDataBuilderImpl: SocketDataBuilder {
     throw SocketClientError.badFormat
   }
   
-  func unwrap(data: Data) throws -> (ValueWrapper, Data) {
+  public func unwrap(data: Data) throws -> (ValueWrapper, Data) {
     guard let id = try decoder.decode(_UnwrappedData.self, from: data).id else {
       throw SocketClientError.badFormat
     }
@@ -41,7 +41,7 @@ final class SocketDataBuilderImpl: SocketDataBuilder {
   }
   
   // swiftlint:disable:next large_tuple
-  func unwrap(response: String) throws -> (ValueWrapper?, ValueWrapper?, Data) {
+  public func unwrap(response: String) throws -> (ValueWrapper?, ValueWrapper?, Data) {
     guard let data = response.data(using: .utf8) else {
       throw SocketClientError.badFormat
     }

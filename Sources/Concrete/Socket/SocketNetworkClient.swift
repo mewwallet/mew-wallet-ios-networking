@@ -2,12 +2,12 @@ import Foundation
 import Starscream
 import Combine
 
-final class SocketNetworkClient: NetworkClient {
+public final class SocketNetworkClient: NetworkClient {
   private let url: URL
   private let headers: [String: String]
   
-  var dataBuilder: SocketDataBuilder!
-  var requestsHandler: SocketRequestsHandler!
+  public var dataBuilder: SocketDataBuilder!
+  private var requestsHandler: SocketRequestsHandler = .init()
 
   private lazy var socket: WebSocket = {
     let request = self.dataBuilder.buildConnectionRequest(
@@ -42,7 +42,10 @@ final class SocketNetworkClient: NetworkClient {
     }
   }
 
-  init(url: URL, headers: [String: String]) {
+  public init(
+    url: URL,
+    headers: [String: String]
+  ) {
     self.url = url
     self.headers = headers
   }
@@ -51,7 +54,7 @@ final class SocketNetworkClient: NetworkClient {
     self.disconnect()
   }
 
-  func send(request: NetworkRequest) async throws -> Any {
+  public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request as? SocketRequest else {
       throw SocketClientError.badFormat
     }
@@ -154,7 +157,7 @@ extension SocketNetworkClient {
 }
 
 extension SocketNetworkClient: WebSocketDelegate {
-  func didReceive(event: WebSocketEvent, client: WebSocket) {
+  public func didReceive(event: WebSocketEvent, client: WebSocket) {
     Task {
       switch event {
       case .text(let text):
