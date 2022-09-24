@@ -30,6 +30,6 @@ let package = Package(
             path: "Sources"),
         .testTarget(
             name: "mew-wallet-ios-networkingTests",
-            dependencies: ["mew-wallet-ios-networking"]),
+            dependencies: ["mew-wallet-ios-networking"])
     ]
 )
