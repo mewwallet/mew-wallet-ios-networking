@@ -14,7 +14,7 @@ final class TaskDeserialization {
     self.deserializer = deserializer
   }
   
-  func process<T>(_ response: NetworkResponse) async throws -> T {
+  func process(_ response: NetworkResponse) async throws -> Any {
     return try await self.deserializer.deserialize(response)
   }
 }

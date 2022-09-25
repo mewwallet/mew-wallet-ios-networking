@@ -8,10 +8,13 @@
 import Foundation
 
 public struct SocketRequestModel: NetworkRequestModel {
+  public let subscription: Bool
   public var body: Any?
   public init(
+    subscription: Bool,
     body: Any? = nil
   ) {
+    self.subscription = subscription
     self.body = body
   }
 }

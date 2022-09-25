@@ -8,5 +8,5 @@
 import Foundation
 
 public protocol NetworkResponseDeserializer {
-  func deserialize<T>(_ data: NetworkResponse?) async throws -> T
+  func deserialize(_ data: NetworkResponse) async throws -> Any
 }
