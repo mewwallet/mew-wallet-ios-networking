@@ -83,6 +83,8 @@ extension SocketNetworkClient {
       =====================================
       """
       )
+    
+      _ = socket // initialize socket
       
       do {
         guard self.isConnected ?? false else {
