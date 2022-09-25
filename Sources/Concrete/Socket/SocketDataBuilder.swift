@@ -10,7 +10,7 @@ public protocol SocketDataBuilder {
 }
 
 public final class SocketDataBuilderImpl: SocketDataBuilder {
-  var decoder: JSONDecoder!
+  public var decoder: JSONDecoder!
 
   public func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest {
     var request = URLRequest(url: url)
