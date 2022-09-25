@@ -11,6 +11,8 @@ public protocol SocketDataBuilder {
 
 public final class SocketDataBuilderImpl: SocketDataBuilder {
   public var decoder: JSONDecoder!
+  
+  public init() {}
 
   public func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest {
     var request = URLRequest(url: url)
