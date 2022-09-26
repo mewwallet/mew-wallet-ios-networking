@@ -16,6 +16,7 @@ public final class SocketNetworkClient: NetworkClient {
     )
     let socket = WebSocket(request: request)
     socket.delegate = self
+    socket.connect()
     return socket
   }()
   
