@@ -52,7 +52,7 @@ public final class NetworkTask {
                   throw error
                 }
               }
-            continuation.resume(returning: mapped)
+            continuation.resume(returning: mapped.eraseToAnyPublisher())
           } else if let response = response as? NetworkResponse {
             let result = try await process(networkResponse: response, config: config)
             continuation.resume(returning: result)
