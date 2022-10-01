@@ -66,11 +66,11 @@ public final class SocketNetworkClient: NetworkClient {
         do {
           // TODO: use this only for subscription
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
-          try await send(request: request, subscription: false, publisher: passthrough)
+          try await send(request: request, subscription: request.subscription, publisher: passthrough)
           continuation.resume(returning: passthrough.eraseToAnyPublisher())
         } catch {
           if request.subscription {
-            continuation.resume(returning: passthrough)
+            continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
             continuation.resume(throwing: error)
           }
