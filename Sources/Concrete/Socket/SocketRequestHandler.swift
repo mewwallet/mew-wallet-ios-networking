@@ -4,7 +4,6 @@ import Combine
 
 // swiftlint:disable large_tuple
 typealias SocketClientResult = Result<NetworkResponse, Error>
-typealias SocketClientPublisher = PassthroughSubject<Result<NetworkResponse, Error>, Never>
 
 final actor SocketRequestsHandler {
   private var dataPool: [Data] = []
@@ -33,7 +32,7 @@ final actor SocketRequestsHandler {
         self.publishers[subscriptionId] = (publisher, true)
       }
     } else {
-      publisher.send(.success(RESTResponse(nil, data: data, statusCode: 200)))
+      publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
     }
   }
   
@@ -41,7 +40,7 @@ final actor SocketRequestsHandler {
     guard let (publisher, _) = self.publishers[id] else {
       return
     }
-    publisher.send(.success(RESTResponse(nil, data: data, statusCode: 200)))
+    publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
   }
   
   func send(error: Error, includingSubscription: Bool) {
@@ -49,11 +48,11 @@ final actor SocketRequestsHandler {
       .lazy
       .filter { !$0.1.1 || includingSubscription}
       .forEach {
-        $0.value.0.send(.failure(error))
+        $0.value.0.send(signal: .failure(error))
       }
     self.publishers.removeAll()
     self.pool.forEach {
-      $0.2.send(.failure(error))
+      $0.2.send(signal: .failure(error))
     }
     self.pool.removeAll()
   }

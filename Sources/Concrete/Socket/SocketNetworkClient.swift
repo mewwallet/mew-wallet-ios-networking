@@ -30,7 +30,12 @@ public final class SocketNetworkClient: NetworkClient {
         if isConnected {
           let pool = await self.requestsHandler.drainPool()
           for val in pool {
-            try? await self.send(request: val.0, subscription: val.1, publisher: val.2)
+            if val.1 {
+              // subscription
+              try? await self.send(request: val.0, publisher: val.2)
+            } else {
+              
+            }
           }
           let dataPool = await self.requestsHandler.drainDataPool()
           dataPool.forEach {
@@ -66,8 +71,23 @@ public final class SocketNetworkClient: NetworkClient {
         do {
           // TODO: use this only for subscription
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
-          try await send(request: request, subscription: request.subscription, publisher: passthrough)
-          continuation.resume(returning: passthrough.eraseToAnyPublisher())
+          if request.subscription {
+            let publisher = SocketClientPublisher(publisher: passthrough)
+            try await send(request: request, publisher: publisher)
+            continuation.resume(returning: passthrough.eraseToAnyPublisher())
+          } else {
+            try await send(
+              request: request,
+              completionBlock: { result in
+                switch result {
+                case .success(let response):
+                  continuation.resume(returning: response)
+                case .failure(let error):
+                  continuation.resume(throwing: error)
+                }
+              }
+            )
+          }
         } catch {
           if request.subscription {
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
@@ -81,10 +101,13 @@ public final class SocketNetworkClient: NetworkClient {
 }
 
 extension SocketNetworkClient {
-  private func send(request: NetworkRequest, subscription: Bool, publisher: SocketClientPublisher) async throws {
+  private func send(
+    request: NetworkRequest,
+    publisher: SocketClientPublisher
+  ) async throws {
       debugPrint(
       """
-      =========New websocket task:=========
+      =========New subscription websocket task:=========
       =====================================
       """
       )
@@ -93,16 +116,11 @@ extension SocketNetworkClient {
       
       do {
         guard self.isConnected ?? false else {
-          if !subscription {
-            guard self.isConnected != nil else {
-              throw SocketClientError.noConnection
-            }
-          }
-          await self.requestsHandler.addToPool(request: (request, subscription, publisher))
+          await self.requestsHandler.addToPool(request: (request, true, publisher))
           return
         }
         let (id, payload) = try self.dataBuilder.unwrap(request: request)
-        await self.requestsHandler.add(publisher: publisher, subscription: subscription, for: id)
+        await self.requestsHandler.add(publisher: publisher, subscription: true, for: id)
         
         self.socket.write(data: payload)
       } catch {
@@ -116,6 +134,41 @@ extension SocketNetworkClient {
         """)
         throw error
       }
+  }
+  
+  private func send(
+    request: NetworkRequest,
+    completionBlock: @escaping (Result<NetworkResponse, Error>) -> Void
+  ) async throws {
+    debugPrint(
+      """
+      =========New sync websocket task:=========
+      =====================================
+      """
+    )
+    
+    _ = socket // initialize socket
+    
+    do {
+      let publisher = SocketClientPublisher(block: completionBlock)
+      guard self.isConnected ?? false else {
+        throw SocketClientError.noConnection
+      }
+      let (id, payload) = try self.dataBuilder.unwrap(request: request)
+      await self.requestsHandler.add(publisher: publisher, subscription: false, for: id)
+      
+      self.socket.write(data: payload)
+    } catch {
+      debugPrint(
+        """
+        ======New websocket task error:======
+         Error:
+          \(error.localizedDescription)
+        =====================================
+        \u{2028}
+        """)
+      throw error
+    }
   }
   
   private func send(data: Data) {
