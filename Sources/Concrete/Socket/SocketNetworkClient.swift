@@ -62,14 +62,18 @@ public final class SocketNetworkClient: NetworkClient {
     
     return try await withCheckedThrowingContinuation { continuation in
       Task {
+        let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
           // TODO: use this only for subscription
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
-          let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
           try await send(request: request, subscription: false, publisher: passthrough)
           continuation.resume(returning: passthrough.eraseToAnyPublisher())
         } catch {
-          continuation.resume(throwing: error)
+          if request.subscription {
+            continuation.resume(returning: passthrough)
+          } else {
+            continuation.resume(throwing: error)
+          }
         }
       }
     }

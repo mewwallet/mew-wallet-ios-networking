@@ -12,8 +12,9 @@ final class SocketRequestBuilder: NetworkRequestBuilder {
     guard let config = config as? SocketRequestModel else {
       throw SocketClientError.badFormat
     }
-    
-    let socketRequest = SocketRequest(request: config.body)
+
+    var socketRequest = SocketRequest(request: config.body)
+    socketRequest.subscription = config.subscription
     return socketRequest
   }
 }
