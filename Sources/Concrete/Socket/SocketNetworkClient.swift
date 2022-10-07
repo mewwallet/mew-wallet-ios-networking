@@ -76,7 +76,9 @@ public final class SocketNetworkClient: NetworkClient {
           if request.subscription {
             let publisher = SocketClientPublisher(publisher: passthrough)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
-            try await send(request: request, publisher: publisher)
+            Task {
+              try await send(request: request, publisher: publisher)
+            }
           } else {
             // TODO: replace completion with continuation
             try await send(
