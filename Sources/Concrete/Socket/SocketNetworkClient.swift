@@ -75,19 +75,13 @@ public final class SocketNetworkClient: NetworkClient {
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
           if request.subscription {
             let publisher = SocketClientPublisher(publisher: passthrough)
-            try await send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
+            try await send(request: request, publisher: publisher)
           } else {
+            // TODO: replace completion with continuation
             try await send(
               request: request,
-              completionBlock: { result in
-                switch result {
-                case .success(let response):
-                  continuation.resume(returning: response)
-                case .failure(let error):
-                  continuation.resume(throwing: error)
-                }
-              }
+              continuation: continuation
             )
           }
         } catch {
@@ -140,7 +134,7 @@ extension SocketNetworkClient {
   
   private func send(
     request: NetworkRequest,
-    completionBlock: @escaping (Result<NetworkResponse, Error>) -> Void
+    continuation: CheckedContinuation<Any, Error>
   ) async throws {
     debugPrint(
       """
@@ -152,7 +146,7 @@ extension SocketNetworkClient {
     _ = socket // initialize socket
     
     do {
-      let publisher = SocketClientPublisher(block: completionBlock)
+      let publisher = SocketClientPublisher(continuation: continuation)
       guard self.isConnected ?? false else {
         throw SocketClientError.noConnection
       }

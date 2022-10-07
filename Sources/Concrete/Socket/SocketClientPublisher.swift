@@ -10,18 +10,23 @@ import Combine
 
 struct SocketClientPublisher {
   private var publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>?
-  private var block: ((Result<NetworkResponse, Error>) -> Void)?
+  private var continuation: CheckedContinuation<Any, Error>?
   
   init(
     publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>? = nil,
-    block: ((Result<NetworkResponse, Error>) -> Void)? = nil
+    continuation: CheckedContinuation<Any, Error>? = nil
   ) {
     self.publisher = publisher
-    self.block = block
+    self.continuation = continuation
   }
   
   func send(signal: Result<NetworkResponse, Error>) {
     publisher?.send(signal)
-    block?(signal)
+    do {
+      let result = try signal.get()
+      continuation?.resume(returning: result)
+    } catch {
+      continuation?.resume(throwing: error)
+    }
   }
 }
