@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import mew_wallet_ios_extensions
 
 public final class NetworkTask {
   enum NetworkTaskError: Error, LocalizedError {
@@ -56,6 +57,8 @@ public final class NetworkTask {
           } else if let response = response as? NetworkResponse {
             let result = try await process(networkResponse: response, config: config)
             continuation.resume(returning: result)
+          } else if let commonPublisher = response as? AnyPublisher<(ValueWrapper, Data), Never> {
+            continuation.resume(returning: commonPublisher)
           }
         } catch {
           continuation.resume(throwing: error)

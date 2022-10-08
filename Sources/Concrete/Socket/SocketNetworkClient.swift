@@ -1,6 +1,7 @@
 import Foundation
 import Starscream
 import Combine
+import mew_wallet_ios_extensions
 
 public final class SocketNetworkClient: NetworkClient {
   private let url: URL
@@ -8,6 +9,8 @@ public final class SocketNetworkClient: NetworkClient {
   
   public var dataBuilder: SocketDataBuilder!
   private var requestsHandler: SocketRequestsHandler = .init()
+  
+  private let _messagePublisher: PassthroughSubject<(ValueWrapper, Data), Never> = .init()
 
   private lazy var socket: WebSocket = {
     let request = self.dataBuilder.buildConnectionRequest(
@@ -40,8 +43,10 @@ public final class SocketNetworkClient: NetworkClient {
             }
           }
           let dataPool = await self.requestsHandler.drainDataPool()
-          dataPool.forEach {
-            self.send(data: $0)
+           dataPool.forEach { value in
+             Task {
+               await self.send(id: value.0, data: value.1)
+             }
           }
         } else {
           await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
@@ -72,8 +77,11 @@ public final class SocketNetworkClient: NetworkClient {
         let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
           // TODO: use this only for subscription
-          let (id, _) = try self.dataBuilder.unwrap(request: request)
-          if request.subscription {
+          let (id, payload) = try self.dataBuilder.unwrap(request: request)
+          if request.useCommonMessagePublisher {
+            continuation.resume(returning: _messagePublisher.eraseToAnyPublisher())
+            await send(id: id, data: payload)
+          } else if request.subscription {
             let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
             let publisher = SocketClientPublisher(publisher: passthrough)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
@@ -169,12 +177,11 @@ extension SocketNetworkClient {
       throw error
     }
   }
-  
-  private func send(data: Data) {
+    
+  private func send(id: ValueWrapper, data: Data) async {
+    await requestsHandler.registerCommonPublisher(for: id)
     guard self.isConnected ?? false else {
-      Task {
-        await self.requestsHandler.addToPool(data: data)
-      }
+      await self.requestsHandler.addToPool(data: (id, data))
       return
     }
     self.socket.write(data: data)
@@ -232,9 +239,17 @@ extension SocketNetworkClient: WebSocketDelegate {
         do {
           let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
           if let id = id {
-            await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
+            if await requestsHandler.shouldUseCommonPublisher(for: id) {
+              _messagePublisher.send((id, response))
+            } else {
+              await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
+            }
           } else if let subscriptionId = subscriptionId {
-            await self.requestsHandler.send(data: response, to: subscriptionId)
+            if await requestsHandler.shouldUseCommonPublisher(for: subscriptionId) {
+              _messagePublisher.send((subscriptionId, response))
+            } else {
+              await self.requestsHandler.send(data: response, to: subscriptionId)
+            }
           }
         } catch {
           debugPrint(error.localizedDescription)

@@ -6,9 +6,10 @@ import Combine
 typealias SocketClientResult = Result<NetworkResponse, Error>
 
 final actor SocketRequestsHandler {
-  private var dataPool: [Data] = []
+  private var dataPool: [(ValueWrapper, Data)] = []
   private var pool: [(NetworkRequest, Bool, SocketClientPublisher)] = []
   private var publishers: [ValueWrapper: (SocketClientPublisher, Bool)] = [:]
+  private var commonPublishers: [ValueWrapper: Bool] = [:]
   
   var subscriptionId: ValueWrapper? {
     return self.publishers.first(where: { $0.value.1 })?.key
@@ -20,6 +21,17 @@ final actor SocketRequestsHandler {
   
   func add(publisher: SocketClientPublisher, subscription: Bool, for id: ValueWrapper) {
     self.publishers[id] = (publisher, subscription)
+  }
+  
+  func registerCommonPublisher(for id: ValueWrapper) {
+    commonPublishers[id] = true
+  }
+  
+  func shouldUseCommonPublisher(for id: ValueWrapper) -> Bool {
+    guard let use = commonPublishers[id] else {
+      return false
+    }
+    return use
   }
   
   func send(data: Data, subscriptionId: ValueWrapper?, to id: ValueWrapper) {
@@ -63,7 +75,7 @@ final actor SocketRequestsHandler {
     self.pool.append(request)
   }
   
-  func addToPool(data: Data) {
+  func addToPool(data: (ValueWrapper, Data)) {
     self.dataPool.append(data)
   }
   
@@ -73,7 +85,7 @@ final actor SocketRequestsHandler {
     return pool
   }
   
-  func drainDataPool() -> [Data] {
+  func drainDataPool() -> [(ValueWrapper, Data)] {
     let pool = self.dataPool
     self.dataPool.removeAll()
     return pool

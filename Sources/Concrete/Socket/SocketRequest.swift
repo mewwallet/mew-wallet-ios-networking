@@ -14,6 +14,7 @@ struct SocketRequest: NetworkRequest {
   
   var request: Any?
   var subscription: Bool = false
+  var useCommonMessagePublisher: Bool = false
   
   init(request: Any?) {
     self.request = request
