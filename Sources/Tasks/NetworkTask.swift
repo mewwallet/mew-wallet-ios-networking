@@ -48,7 +48,7 @@ public final class NetworkTask {
               .asyncMap { [weak self] response -> Any? in
                 switch response {
                 case .success(let response):
-                  return try await self?.process(networkResponse:response, config:config)
+                  return try await self?.process(networkResponse: response, config: config)
                 case .failure(let error):
                   throw error
                 }
