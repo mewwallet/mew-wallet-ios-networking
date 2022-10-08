@@ -15,7 +15,7 @@ final actor SocketRequestsHandler {
   }
   
   func publisher(for id: ValueWrapper) -> SocketClientPublisher? {
-    return nil
+    return publishers[id]?.0
   }
   
   func add(publisher: SocketClientPublisher, subscription: Bool, for id: ValueWrapper) {

@@ -72,8 +72,9 @@ public final class SocketNetworkClient: NetworkClient {
         let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
           // TODO: use this only for subscription
-          let (id, payload) = try self.dataBuilder.unwrap(request: request)
+          let (id, _) = try self.dataBuilder.unwrap(request: request)
           if request.subscription {
+            let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
             let publisher = SocketClientPublisher(publisher: passthrough)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
             Task.detached { [weak self] in

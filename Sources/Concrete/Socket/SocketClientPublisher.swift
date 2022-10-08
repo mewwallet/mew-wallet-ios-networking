@@ -9,8 +9,8 @@ import Foundation
 import Combine
 
 struct SocketClientPublisher {
-  private var publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>?
-  private var continuation: CheckedContinuation<Any, Error>?
+  let publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>?
+  let continuation: CheckedContinuation<Any, Error>?
   
   init(
     publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>? = nil,
