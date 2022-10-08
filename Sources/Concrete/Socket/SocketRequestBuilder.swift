@@ -15,6 +15,7 @@ final class SocketRequestBuilder: NetworkRequestBuilder {
 
     var socketRequest = SocketRequest(request: config.body)
     socketRequest.subscription = config.subscription
+    socketRequest.useCommonMessagePublisher = config.useCommonMessagePublisher
     return socketRequest
   }
 }
