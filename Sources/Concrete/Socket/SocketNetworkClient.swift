@@ -76,17 +76,23 @@ public final class SocketNetworkClient: NetworkClient {
       Task {
         let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
-          // TODO: use this only for subscription
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
           if request.useCommonMessagePublisher {
             continuation.resume(returning: _messagePublisher.eraseToAnyPublisher())
-            await send(id: id, data: payload)
+            // TODO: make async
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) {
+              Task {
+                await self.send(id: id, data: payload)
+              }
+            }
           } else if request.subscription {
             let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
             let publisher = SocketClientPublisher(publisher: passthrough)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
-            Task.detached { [weak self] in
-              try await self?.send(request: request, publisher: publisher)
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) {
+              Task { [weak self] in
+                try await self?.send(request: request, publisher: publisher)
+              }
             }
           } else {
             // TODO: replace completion with continuation
