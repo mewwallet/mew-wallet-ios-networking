@@ -43,6 +43,7 @@ final actor SocketRequestsHandler {
       if let subscriptionId = subscriptionId, subscription {
         self.publishers[subscriptionId] = (publisher, true)
       }
+      publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
     } else {
       publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
     }
