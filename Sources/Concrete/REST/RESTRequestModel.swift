@@ -39,7 +39,7 @@ public struct RESTRequestModel: NetworkRequestModel {
   public var baseURL: URL?
   public var networkPath: NetworkPath?
   public var method: Method = .get
-  public var headers: [String:String?]?
+  public var headers: Headers?
   public var body: Data?
   
   // MARK: - Modifiers
@@ -68,7 +68,7 @@ public struct RESTRequestModel: NetworkRequestModel {
     return `self`
   }
   
-  public func headers(_ headers: [String: String?]?) -> Self {
+  public func headers(_ headers: Headers?) -> Self {
     var `self` = self
     `self`.self.headers = headers
     return `self`
@@ -77,7 +77,7 @@ public struct RESTRequestModel: NetworkRequestModel {
   public init(baseURL: URL? = nil,
               networkPath: NetworkPath? = nil,
               method: Method = .get,
-              headers: [String:String?]? = nil,
+              headers: Headers? = nil,
               body: Data? = nil) {
     self.baseURL = baseURL
     self.networkPath = networkPath

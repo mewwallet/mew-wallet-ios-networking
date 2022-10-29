@@ -15,6 +15,8 @@ public struct mew_wallet_ios_networking {
     let publisher = PassthroughSubject<Any, Error>()
     Task {
       enum MEWPath: NetworkPath {
+        var isSocket: Bool { false }
+        
         case v2_stake_info
         var path: String {
           switch self {

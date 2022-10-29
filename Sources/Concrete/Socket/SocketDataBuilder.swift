@@ -2,7 +2,7 @@ import Foundation
 import mew_wallet_ios_extensions
 
 public protocol SocketDataBuilder {
-  func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest
+  func buildConnectionRequest(url: URL, headers: Headers) -> URLRequest
   func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data)
   func unwrap(data: Data) throws -> (ValueWrapper, Data)
   // swiftlint:disable:next large_tuple
@@ -14,7 +14,7 @@ public final class SocketDataBuilderImpl: SocketDataBuilder {
   
   public init() {}
 
-  public func buildConnectionRequest(url: URL, headers: [String: String]) -> URLRequest {
+  public func buildConnectionRequest(url: URL, headers: Headers) -> URLRequest {
     var request = URLRequest(url: url)
     headers.forEach {
       request.addValue($0.value, forHTTPHeaderField: $0.key)

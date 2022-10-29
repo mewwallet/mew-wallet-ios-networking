@@ -8,6 +8,7 @@
 import Foundation
 
 public protocol NetworkPath {
+  var isSocket: Bool { get }
   var path: String { get }
   var query: [URLQueryItem]? { get throws }
 }

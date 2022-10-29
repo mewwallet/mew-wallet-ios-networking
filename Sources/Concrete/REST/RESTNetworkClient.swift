@@ -7,6 +7,8 @@
 
 import Foundation
 import Combine
+import os
+import mew_wallet_ios_logger
 
 public final class RESTClient: NetworkClient {
   enum NetworkClientError: Error {
@@ -21,11 +23,43 @@ public final class RESTClient: NetworkClient {
   
   public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request.request as? URLRequest else { throw NetworkClientError.invalidRequest }
-    let (data, response) = try await session.safeData(for: request)
-    if let response = response as? HTTPURLResponse {
-      return RESTResponse(response, data: data, statusCode: response.statusCode)
-    } else {
-      return RESTResponse(nil, data: data, statusCode: .success)
+    
+    Logger.debug(system: .restNetworkClient,
+      """
+      
+      ==========New network task:==========
+       URL: \(request.httpMethod ?? "Unknown") \(request.url?.absoluteString ?? "Unknown")
+       Headers: \(request.allHTTPHeaderFields.debugDescription)
+       Body: \(request.httpBody != nil ? String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "Unknown" : "None")
+      =====================================
+      """
+    )
+    do {
+      let (data, response) = try await session.safeData(for: request)
+      
+      Logger.debug(system: .restNetworkClient,
+        """
+        
+        =====Network task did finished:=====
+         Request: \(request.httpMethod ?? "") \(request.url?.debugDescription ?? "")
+         Response: \(data != nil ? (String(data: data!, encoding: .utf8) ?? "Can't convert response to string") : "None")
+        ====================================
+        """)
+      if let response = response as? HTTPURLResponse {
+        return RESTResponse(response, data: data, statusCode: response.statusCode)
+      } else {
+        return RESTResponse(nil, data: data, statusCode: .success)
+      }
+    } catch {
+      Logger.error(system: .restNetworkClient,
+      """
+      
+      =====Network task did finished:=====
+       Request: \(request.httpMethod ?? "") \(request.url?.debugDescription ?? "")
+       Error: \(error.localizedDescription)
+      ====================================
+      """)
+      throw error
     }
   }
 }
