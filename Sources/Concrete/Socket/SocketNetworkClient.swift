@@ -2,6 +2,8 @@ import Foundation
 import Starscream
 import Combine
 import mew_wallet_ios_extensions
+import mew_wallet_ios_logger
+import os
 
 public final class SocketNetworkClient: NetworkClient {
   private let url: URL
@@ -11,7 +13,7 @@ public final class SocketNetworkClient: NetworkClient {
   private var requestsHandler: SocketRequestsHandler = .init()
   
   private let _messagePublisher: PassthroughSubject<(ValueWrapper, Data), Never> = .init()
-
+  
   private lazy var socket: WebSocket = {
     let request = self.dataBuilder.buildConnectionRequest(
       url: self.url,
@@ -30,12 +32,13 @@ public final class SocketNetworkClient: NetworkClient {
       guard let isConnected = isConnected else {
         return
       }
-
+      
       Task {
         if isConnected {
           let pool = await self.requestsHandler.drainPool()
           for val in pool {
             if val.1 {
+              // TODO: Make pretty
               // subscription
               try? await self.send(request: val.0, publisher: val.2)
             } else {
@@ -43,10 +46,10 @@ public final class SocketNetworkClient: NetworkClient {
             }
           }
           let dataPool = await self.requestsHandler.drainDataPool()
-           dataPool.forEach { value in
-             Task {
-               await self.send(id: value.0, data: value.1)
-             }
+          dataPool.forEach { value in
+            Task {
+              await self.send(id: value.0, data: value.1)
+            }
           }
         } else {
           await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
@@ -54,7 +57,7 @@ public final class SocketNetworkClient: NetworkClient {
       }
     }
   }
-
+  
   public init(url: URL, headers: Headers) {
     self.url = url
     self.headers = headers
@@ -63,7 +66,7 @@ public final class SocketNetworkClient: NetworkClient {
   deinit {
     self.disconnect()
   }
-
+  
   public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request as? SocketRequest else {
       throw SocketClientError.badFormat
@@ -115,26 +118,25 @@ extension SocketNetworkClient {
     request: NetworkRequest,
     publisher: SocketClientPublisher
   ) async throws {
-      debugPrint(
-      """
-      =========New subscription websocket task:=========
-      =====================================
-      """
-      )
+    Logger.debug(.socketNetworkClient,
+          """
+          
+          =========New subscription websocket task:=========
+          =====================================
+          """)
+    _ = socket // initialize socket
     
-      _ = socket // initialize socket
+    do {
+      guard self.isConnected ?? false else {
+        await self.requestsHandler.addToPool(request: (request, true, publisher))
+        return
+      }
+      let (id, payload) = try self.dataBuilder.unwrap(request: request)
+      await self.requestsHandler.add(publisher: publisher, subscription: true, for: id)
       
-      do {
-        guard self.isConnected ?? false else {
-          await self.requestsHandler.addToPool(request: (request, true, publisher))
-          return
-        }
-        let (id, payload) = try self.dataBuilder.unwrap(request: request)
-        await self.requestsHandler.add(publisher: publisher, subscription: true, for: id)
-        
-        self.socket.write(data: payload)
-      } catch {
-        debugPrint(
+      self.socket.write(data: payload)
+    } catch {
+      Logger.debug(.socketNetworkClient,
         """
         ======New websocket task error:======
          Error:
@@ -142,15 +144,15 @@ extension SocketNetworkClient {
         =====================================
         \u{2028}
         """)
-        throw error
-      }
+      throw error
+    }
   }
   
   private func send(
     request: NetworkRequest,
     continuation: CheckedContinuation<Any, Error>
   ) async throws {
-    debugPrint(
+    Logger.debug(.socketNetworkClient,
       """
       =========New sync websocket task:=========
       =====================================
@@ -169,7 +171,7 @@ extension SocketNetworkClient {
       
       self.socket.write(data: payload)
     } catch {
-      debugPrint(
+      Logger.debug(.socketNetworkClient,
         """
         ======New websocket task error:======
          Error:
@@ -180,7 +182,7 @@ extension SocketNetworkClient {
       throw error
     }
   }
-    
+  
   private func send(id: ValueWrapper, data: Data) async {
     await requestsHandler.registerCommonPublisher(for: id)
     guard self.isConnected ?? false else {
@@ -189,7 +191,7 @@ extension SocketNetworkClient {
     }
     self.socket.write(data: data)
   }
-
+  
   private func connect() {
     if Thread.isMainThread {
       socket.connect()
@@ -230,7 +232,7 @@ extension SocketNetworkClient: WebSocketDelegate {
     Task {
       switch event {
       case .text(let text):
-        debugPrint(
+        Logger.debug(.socketNetworkClient,
           """
           =======New websocket message:========
            Message:
@@ -255,23 +257,23 @@ extension SocketNetworkClient: WebSocketDelegate {
             }
           }
         } catch {
-          debugPrint(error.localizedDescription)
+          Logger.debug(.socketNetworkClient, error)
         }
         
       case .cancelled:
-        debugPrint(">>> cancelled")
+        Logger.debug(.socketNetworkClient, ">>> cancelled")
         self.reconnect()
         
       case let .error(error):
-        debugPrint(">>> error: \(error?.localizedDescription ?? "<empty>")")
+        Logger.debug(.socketNetworkClient, ">>> error: \(error?.localizedDescription ?? "<empty>")")
         self.reconnect()
         
       case .disconnected:
-        debugPrint(">>> disconnected")
+        Logger.debug(.socketNetworkClient, ">>> disconnected")
         self.reconnect()
         
       case .connected:
-        debugPrint(">>> connected")
+        Logger.debug(.socketNetworkClient, ">>> connected")
         self.isConnected = true
       case .ping:
         socket.write(pong: Data())
@@ -281,7 +283,7 @@ extension SocketNetworkClient: WebSocketDelegate {
           self.reconnect()
         }
       default:
-        debugPrint(String(describing: event))
+        Logger.debug(.socketNetworkClient, String(describing: event))
       }
     }
   }
