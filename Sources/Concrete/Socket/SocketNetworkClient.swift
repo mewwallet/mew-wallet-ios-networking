@@ -5,7 +5,7 @@ import mew_wallet_ios_extensions
 
 public final class SocketNetworkClient: NetworkClient {
   private let url: URL
-  private let headers: [String: String]
+  private let headers: Headers
   
   public var dataBuilder: SocketDataBuilder!
   private var requestsHandler: SocketRequestsHandler = .init()
@@ -55,10 +55,7 @@ public final class SocketNetworkClient: NetworkClient {
     }
   }
 
-  public init(
-    url: URL,
-    headers: [String: String]
-  ) {
+  public init(url: URL, headers: Headers) {
     self.url = url
     self.headers = headers
   }
