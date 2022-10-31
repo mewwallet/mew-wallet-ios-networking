@@ -24,7 +24,7 @@ public final class NetworkTask {
   
   public static let shared = NetworkTask()
   
-  public func run(config: NetworkRequestConfig) async throws -> Any? {
+  public func run<R>(config: NetworkRequestConfig) async throws -> R {
     return try await withCheckedThrowingContinuation { continuation in
       Task {
         do {
@@ -53,12 +53,12 @@ public final class NetworkTask {
                   throw error
                 }
               }
-            continuation.resume(returning: mapped.eraseToAnyPublisher())
+            continuation.resume(returning: mapped.eraseToAnyPublisher() as! R)
           } else if let response = response as? NetworkResponse {
-            let result = try await process(networkResponse: response, config: config)
+            let result: R = try await process(networkResponse: response, config: config)
             continuation.resume(returning: result)
           } else if let commonPublisher = response as? AnyPublisher<(ValueWrapper, Data), Never> {
-            continuation.resume(returning: commonPublisher)
+            continuation.resume(returning: commonPublisher as! R)
           }
         } catch {
           continuation.resume(throwing: error)
@@ -67,7 +67,7 @@ public final class NetworkTask {
     }
   }
   
-  private func process(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> Any? {
+  private func process<R>(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> R {
     guard case .success = networkResponse.statusCode else {
       if let body = networkResponse.data as? Data {
         throw NetworkTaskError.badCode(networkResponse.statusCode.code, String(data: body, encoding: .utf8) ?? "Unknown")
@@ -110,16 +110,19 @@ public final class NetworkTask {
     }
     
     /// Mapping
-    let result: Any?
+    let result: R
     switch config.mapping {
     case .disable:
-      result = converted
+      precondition(converted is R)
+      result = converted as! R
     case .custom(let mapper):
       let task_mapping = TaskResponseMapping(mapper: mapper)
       guard let converted = converted else {
         throw NetworkTaskError.badIntermediateState
       }
-      result = try await task_mapping.process(converted)
+      let mapped = try await task_mapping.process(converted)
+      precondition(mapped is R)
+      result = mapped as! R
     }
     return result
   }
