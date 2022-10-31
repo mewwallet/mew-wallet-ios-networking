@@ -1,6 +1,6 @@
 import Foundation
-import mew_wallet_ios_extensions
 import Combine
+import mew_wallet_ios_extensions
 
 // swiftlint:disable large_tuple
 typealias SocketClientResult = Result<NetworkResponse, Error>

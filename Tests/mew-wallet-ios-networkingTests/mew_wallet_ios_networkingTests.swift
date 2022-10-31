@@ -4,23 +4,8 @@ import Combine
 
 final class mew_wallet_ios_networkingTests: XCTestCase {
   var cancellables = Set<AnyCancellable>()
-    func testExample() throws {
-      
-      let expectation = XCTestExpectation(description: "wait for completion")
-      
-      mew_wallet_ios_networking().runNetworkCall(config: nil)
-        .sink(receiveCompletion: { completion in
-          debugPrint(">>> \(completion)")
-          expectation.fulfill()
-        }, receiveValue: { value in
-          debugPrint("received \(value)")
-        })
-        .store(in: &cancellables)
-      
-      wait(for: [expectation], timeout: 60.0)
-    }
-  
-  func test2() async {
+    
+  func test() async {
     let networkClient = RESTClient(session: .shared)
     
     let baseURL = URL(string: "https://mainnet.mewwallet.dev")!
@@ -37,7 +22,7 @@ final class mew_wallet_ios_networkingTests: XCTestCase {
                                       conversion: .disable,
                                       mapping: .disable)
     do {
-      guard let result = try await NetworkTask.shared.run(config: config) as? Data else { return }
+      let result: Data = try await NetworkTask.shared.run(config: config)
       debugPrint("Answer! \(String(data: result, encoding: .utf8) ?? "")")
     } catch {
       debugPrint("Error! \(error)")
@@ -46,6 +31,8 @@ final class mew_wallet_ios_networkingTests: XCTestCase {
 }
 
 enum TestMEWPath: NetworkPath {
+  var isSocket: Bool { false }
+  
   case v2_stake_info
   var path: String {
     switch self {
