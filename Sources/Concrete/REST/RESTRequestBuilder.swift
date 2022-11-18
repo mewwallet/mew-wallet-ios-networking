@@ -24,8 +24,12 @@ final class RESTRequestBuilder: NetworkRequestBuilder {
       initComponents = URLComponents()
     }
     
-    if let path = path {
-      initComponents.path = path
+    if let path = path, !path.isEmpty {
+      if !initComponents.path.hasSuffix("/"), !path.hasPrefix("/") {
+        initComponents.path += "/" + path
+      } else {
+        initComponents.path += path
+      }
     }
     
     baseComponents = initComponents
@@ -42,7 +46,13 @@ final class RESTRequestBuilder: NetworkRequestBuilder {
       components = self.baseComponents
     }
     
-    if let path = config.networkPath?.path { components.path = path.hasPrefix("/") ? path : "/" + path }
+    if let path = config.networkPath?.path, !path.isEmpty {
+      if !components.path.hasSuffix("/"), !path.hasPrefix("/") {
+        components.path += "/" + path
+      } else {
+        components.path += path
+      }
+    }
     if let queryItems = try config.networkPath?.query { components.queryItems = queryItems }
     guard let url = components.url else { throw BuilderError.invalidURL }
     var request = URLRequest(url: url)
