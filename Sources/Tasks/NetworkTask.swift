@@ -10,14 +10,25 @@ import Combine
 import mew_wallet_ios_extensions
 
 public final class NetworkTask {
-  enum NetworkTaskError: Error, LocalizedError {
+  public enum Error: LocalizedError {
     case badIntermediateState
-    case badCode(Int, String)
+    case code_404_notFound(response: String)
+    case badCode(code: Int, response: String)
     
-    var errorDescription: String? {
+    init(code: Int, response: String) {
+      switch code {
+      case 404:
+        self = .code_404_notFound(response: response)
+      default:
+        self = .badCode(code: code, response: response)
+      }
+    }
+    
+    public var errorDescription: String? {
       switch self {
-      case .badIntermediateState:         return "Bad intermediate state"
-      case .badCode(_, let description):  return description
+      case .badIntermediateState:             return "Bad intermediate state"
+      case .badCode(_, let description):      return description
+      case .code_404_notFound(let response):  return "404: \(response)"
       }
     }
   }
@@ -70,9 +81,9 @@ public final class NetworkTask {
   private func process<R>(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> R {
     guard case .success = networkResponse.statusCode else {
       if let body = networkResponse.data as? Data {
-        throw NetworkTaskError.badCode(networkResponse.statusCode.code, String(data: body, encoding: .utf8) ?? "Unknown")
+        throw Error(code: networkResponse.statusCode.code, response: String(data: body, encoding: .utf8) ?? "Unknown")
       } else {
-        throw NetworkTaskError.badCode(networkResponse.statusCode.code, "No response")
+        throw Error(code: networkResponse.statusCode.code, response: "No response")
       }
     }
     
@@ -82,7 +93,7 @@ public final class NetworkTask {
     case .disable:
       // TODO: Throw an error?
       guard let data = networkResponse.data else {
-        throw NetworkTaskError.badIntermediateState
+        throw NetworkTask.Error.badIntermediateState
       }
       deserialized = data
     case .custom(let deserializer):
@@ -118,7 +129,7 @@ public final class NetworkTask {
     case .custom(let mapper):
       let task_mapping = TaskResponseMapping(mapper: mapper)
       guard let converted = converted else {
-        throw NetworkTaskError.badIntermediateState
+        throw NetworkTask.Error.badIntermediateState
       }
       let mapped = try await task_mapping.process(converted)
       precondition(mapped is R)
