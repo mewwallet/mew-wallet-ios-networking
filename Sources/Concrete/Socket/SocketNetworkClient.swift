@@ -88,12 +88,8 @@ public final class SocketNetworkClient: NetworkClient {
           } else if request.subscription {
             let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
             let publisher = SocketClientPublisher(publisher: passthrough)
+            try await self.send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) {
-              Task { [weak self] in
-                try await self?.send(request: request, publisher: publisher)
-              }
-            }
           } else {
             // TODO: replace completion with continuation
             try await send(

@@ -54,7 +54,7 @@ public final class NetworkTask {
           /// Execute the request
           let request = try await task_build.process(config.request.model)
           let response = try await task_request.process(request)
-          if let publisher = response as? AnyPublisher<Result<NetworkResponse, Error>, Never> {
+          if let publisher = response as? AnyPublisher<Result<NetworkResponse, Swift.Error>, Never> {
             let mapped = publisher
               .asyncMap { [weak self] response -> Any? in
                 switch response {
