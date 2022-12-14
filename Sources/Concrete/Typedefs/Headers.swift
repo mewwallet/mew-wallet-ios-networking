@@ -21,4 +21,22 @@ extension Headers {
     `self`["Content-Type"] = contentType.rawValue
     return `self`
   }
+  
+  public func with(userAgent: String) -> Headers {
+    var `self` = self
+    `self`["User-Agent"] = userAgent
+    return `self`
+  }
+  
+  public func with(origin: String) -> Headers {
+    var `self` = self
+    `self`["Origin"] = origin
+    return `self`
+  }
+  
+  public func with(key: String, value: String) -> Headers {
+    var `self` = self
+    `self`[key] = value
+    return `self`
+  }
 }
