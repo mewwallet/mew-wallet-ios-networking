@@ -38,8 +38,8 @@ final actor SocketRequestsHandler {
     guard let (publisher, subscription) = self.publishers[id] else {
       return
     }
+    self.publishers.removeValue(forKey: id)
     if subscription {
-      self.publishers.removeValue(forKey: id)
       if let subscriptionId = subscriptionId, subscription {
         self.publishers[subscriptionId] = (publisher, true)
       }
@@ -50,10 +50,13 @@ final actor SocketRequestsHandler {
   }
   
   func send(data: Data, to id: ValueWrapper) {
-    guard let (publisher, _) = self.publishers[id] else {
+    guard let (publisher, subscription) = self.publishers[id] else {
       return
     }
     publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
+    if (!subscription) {
+      publishers.removeValue(forKey: id)
+    }
   }
   
   func send(error: Error, includingSubscription: Bool) {
