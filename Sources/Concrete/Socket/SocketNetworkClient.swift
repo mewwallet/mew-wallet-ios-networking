@@ -74,7 +74,7 @@ public final class SocketNetworkClient: NetworkClient {
     
     return try await withCheckedThrowingContinuation { continuation in
       Task {
-        let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
+        var passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
           let (id, payload) = try self.dataBuilder.unwrap(request: request)
           if request.useCommonMessagePublisher {
@@ -86,9 +86,12 @@ public final class SocketNetworkClient: NetworkClient {
               }
             }
           } else if request.subscription {
-            let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
-            let publisher = SocketClientPublisher(publisher: passthrough)
-            try await self.send(request: request, publisher: publisher)
+            if let storedPassthrough = await self.requestsHandler.publisher(for: id)?.publisher {
+              passthrough = storedPassthrough
+            } else {
+              let publisher = SocketClientPublisher(publisher: passthrough)
+              try await self.send(request: request, publisher: publisher)
+            }
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
             // TODO: replace completion with continuation
