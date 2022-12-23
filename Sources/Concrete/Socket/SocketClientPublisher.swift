@@ -29,4 +29,14 @@ struct SocketClientPublisher {
       continuation?.resume(throwing: error)
     }
   }
+  
+  func complete(signal: Result<NetworkResponse, Error>) {
+    publisher?.send(completion: .finished)
+    do {
+      let result = try signal.get()
+      continuation?.resume(returning: result)
+    } catch {
+      continuation?.resume(throwing: error)
+    }
+  }
 }

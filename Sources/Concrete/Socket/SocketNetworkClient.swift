@@ -52,7 +52,7 @@ public final class SocketNetworkClient: NetworkClient {
             }
           }
         } else {
-          await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: false)
+          await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
         }
       }
     }
