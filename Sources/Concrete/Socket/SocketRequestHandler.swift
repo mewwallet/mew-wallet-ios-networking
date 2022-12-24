@@ -38,8 +38,8 @@ final actor SocketRequestsHandler {
     guard let (publisher, subscription) = self.publishers[id] else {
       return
     }
+    self.publishers.removeValue(forKey: id)
     if subscription {
-      self.publishers.removeValue(forKey: id)
       if let subscriptionId = subscriptionId, subscription {
         self.publishers[subscriptionId] = (publisher, true)
       }
@@ -50,10 +50,13 @@ final actor SocketRequestsHandler {
   }
   
   func send(data: Data, to id: ValueWrapper) {
-    guard let (publisher, _) = self.publishers[id] else {
+    guard let (publisher, subscription) = self.publishers[id] else {
       return
     }
     publisher.send(signal: .success(RESTResponse(nil, data: data, statusCode: 200)))
+    if (!subscription) {
+      publishers.removeValue(forKey: id)
+    }
   }
   
   func send(error: Error, includingSubscription: Bool) {
@@ -61,11 +64,11 @@ final actor SocketRequestsHandler {
       .lazy
       .filter { !$0.1.1 || includingSubscription}
       .forEach {
-        $0.value.0.send(signal: .failure(error))
+        $0.value.0.complete(signal: .failure(error))
       }
     self.publishers.removeAll()
     self.pool.forEach {
-      $0.2.send(signal: .failure(error))
+      $0.2.complete(signal: .failure(error))
     }
     self.pool.removeAll()
   }
