@@ -64,13 +64,23 @@ final actor SocketRequestsHandler {
       .lazy
       .filter { !$0.1.1 || includingSubscription}
       .forEach {
-        $0.value.0.complete(signal: .failure(error))
+        $0.value.0.send(signal: .failure(error))
       }
     self.publishers.removeAll()
     self.pool.forEach {
-      $0.2.complete(signal: .failure(error))
+      $0.2.send(signal: .failure(error))
     }
     self.pool.removeAll()
+  }
+  
+  func sendReconnectedEvent() {
+    // only for subscriptions
+    self.publishers
+      .lazy
+      .filter { $0.1.1 }
+      .forEach {
+        $0.value.0.send(signal: .failure(SocketClientError.connected))
+      }
   }
   
   // MARK: - Pool of requests

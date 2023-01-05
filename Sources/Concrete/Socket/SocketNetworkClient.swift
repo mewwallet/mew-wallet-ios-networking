@@ -51,6 +51,7 @@ public final class SocketNetworkClient: NetworkClient {
               await self.send(id: value.0, data: value.1)
             }
           }
+          await self.requestsHandler.sendReconnectedEvent()
         } else {
           await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
         }
@@ -94,7 +95,6 @@ public final class SocketNetworkClient: NetworkClient {
             }
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
-            // TODO: replace completion with continuation
             try await send(
               request: request,
               continuation: continuation
