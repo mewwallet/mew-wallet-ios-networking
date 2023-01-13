@@ -90,6 +90,9 @@ final actor SocketRequestsHandler {
       .forEach {
         $0.value.0.send(signal: .failure(SocketClientError.connected))
       }
+    self.commonPublishers.lazy.forEach {
+      $0.value.send(signal: .failure(SocketClientError.connected))
+    }
   }
   
   // MARK: - Pool of requests

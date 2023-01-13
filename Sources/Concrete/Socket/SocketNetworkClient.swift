@@ -83,15 +83,13 @@ public final class SocketNetworkClient: NetworkClient {
 
           if request.subscription {
             let publisherId = request.publisherId.map { ValueWrapper.stringValue($0) }
-            
             await requestsHandler.registerCommonPublisher(for: publisherId)
 
             if let storedPassthrough = await self.requestsHandler.publisher(for: id, publisherId: publisherId)?.publisher {
               passthrough = storedPassthrough
-            } else {
-              let publisher = SocketClientPublisher(publisher: passthrough)
-              try await self.send(request: request, publisher: publisher)
             }
+            let publisher = SocketClientPublisher(publisher: passthrough)
+            try await self.send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
             try await send(
