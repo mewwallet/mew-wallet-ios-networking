@@ -6,4 +6,5 @@ public enum SocketClientError: Error {
   case error(Int)
   case timeout
   case noConnection
+  case connected
 }
