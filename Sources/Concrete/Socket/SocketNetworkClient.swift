@@ -39,8 +39,8 @@ public final class SocketNetworkClient: NetworkClient {
               // TODO: Make pretty
               // subscription
               try? await self.send(request: val.0, publisher: val.2)
-            } else {
-              
+            } else if let continuation = val.2.continuation {
+              try? await self.send(request: val.0, continuation: continuation)
             }
           }
           let dataPool = await self.requestsHandler.drainDataPool()
@@ -159,6 +159,11 @@ extension SocketNetworkClient {
     
     do {
       let publisher = SocketClientPublisher(continuation: continuation)
+      if self.isConnected == nil {
+        await self.requestsHandler.addToPool(request: (request, false, publisher))
+        return
+      }
+
       guard self.isConnected ?? false else {
         throw SocketClientError.noConnection
       }
