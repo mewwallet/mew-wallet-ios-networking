@@ -16,6 +16,7 @@ public struct RESTRequestModel: NetworkRequestModel {
       case .post:                 return "POST"
       case .put:                  return "PUT"
       case .patch:                return "PATCH"
+      case .delete:               return "DELETE"
       case .custom(let method):   return method
       }
     }
@@ -26,6 +27,7 @@ public struct RESTRequestModel: NetworkRequestModel {
       case "POST":                self = .post
       case "PUT":                 self = .put
       case "PATCH":               self = .patch
+      case "DELETE":              self = .delete
       default:                    self = .custom(rawValue)
       }
     }
@@ -34,6 +36,7 @@ public struct RESTRequestModel: NetworkRequestModel {
     case post
     case put
     case patch
+    case delete
     case custom(String)
   }
   

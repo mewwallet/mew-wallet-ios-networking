@@ -11,9 +11,7 @@ public final class SocketNetworkClient: NetworkClient {
   
   public var dataBuilder: SocketDataBuilder!
   private var requestsHandler: SocketRequestsHandler = .init()
-  
-  private let _messagePublisher: PassthroughSubject<(ValueWrapper, Data), Never> = .init()
-  
+    
   private lazy var socket: WebSocket = {
     let request = self.dataBuilder.buildConnectionRequest(
       url: self.url,
@@ -41,8 +39,8 @@ public final class SocketNetworkClient: NetworkClient {
               // TODO: Make pretty
               // subscription
               try? await self.send(request: val.0, publisher: val.2)
-            } else {
-              
+            } else if let continuation = val.2.continuation {
+              try? await self.send(request: val.0, continuation: continuation)
             }
           }
           let dataPool = await self.requestsHandler.drainDataPool()
@@ -51,8 +49,13 @@ public final class SocketNetworkClient: NetworkClient {
               await self.send(id: value.0, data: value.1)
             }
           }
+          if oldValue == false {
+            await self.requestsHandler.sendReconnectedEvent()
+          }
         } else {
-          await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
+          if oldValue == true {
+            await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
+          }
         }
       }
     }
@@ -74,24 +77,21 @@ public final class SocketNetworkClient: NetworkClient {
     
     return try await withCheckedThrowingContinuation { continuation in
       Task {
-        let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
+        var passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
-          let (id, payload) = try self.dataBuilder.unwrap(request: request)
-          if request.useCommonMessagePublisher {
-            continuation.resume(returning: _messagePublisher.eraseToAnyPublisher())
-            // TODO: make async
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) {
-              Task {
-                await self.send(id: id, data: payload)
-              }
+          let (id, _) = try self.dataBuilder.unwrap(request: request)
+
+          if request.subscription {
+            let publisherId = request.publisherId.map { ValueWrapper.stringValue($0) }
+            await requestsHandler.registerCommonPublisher(for: publisherId)
+
+            if let storedPassthrough = await self.requestsHandler.publisher(for: id, publisherId: publisherId)?.publisher {
+              passthrough = storedPassthrough
             }
-          } else if request.subscription {
-            let passthrough = await self.requestsHandler.publisher(for: id)?.publisher ?? passthrough
             let publisher = SocketClientPublisher(publisher: passthrough)
             try await self.send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
-            // TODO: replace completion with continuation
             try await send(
               request: request,
               continuation: continuation
@@ -159,6 +159,11 @@ extension SocketNetworkClient {
     
     do {
       let publisher = SocketClientPublisher(continuation: continuation)
+      if self.isConnected == nil {
+        await self.requestsHandler.addToPool(request: (request, false, publisher))
+        return
+      }
+
       guard self.isConnected ?? false else {
         throw SocketClientError.noConnection
       }
@@ -240,17 +245,9 @@ extension SocketNetworkClient: WebSocketDelegate {
         do {
           let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
           if let id = id {
-            if await requestsHandler.shouldUseCommonPublisher(for: id) {
-              _messagePublisher.send((id, response))
-            } else {
-              await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
-            }
+            await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
           } else if let subscriptionId = subscriptionId {
-            if await requestsHandler.shouldUseCommonPublisher(for: subscriptionId) {
-              _messagePublisher.send((subscriptionId, response))
-            } else {
-              await self.requestsHandler.send(data: response, to: subscriptionId)
-            }
+            await self.requestsHandler.send(data: response, to: subscriptionId)
           }
         } catch {
           Logger.debug(.socketNetworkClient, error)

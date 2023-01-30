@@ -13,22 +13,23 @@ public final class NetworkTask {
   public enum Error: LocalizedError {
     case badIntermediateState
     case code_404_notFound(response: String)
+    case code_429_awsTooManyRequests(response: String)
     case badCode(code: Int, response: String)
     
     init(code: Int, response: String) {
       switch code {
-      case 404:
-        self = .code_404_notFound(response: response)
-      default:
-        self = .badCode(code: code, response: response)
+      case NetworkResponseCode.notFound.code:             self = .code_404_notFound(response: response)
+      case NetworkResponseCode.aws_tooManyRequests.code:  self = .code_429_awsTooManyRequests(response: response)
+      default:                                            self = .badCode(code: code, response: response)
       }
     }
     
     public var errorDescription: String? {
       switch self {
-      case .badIntermediateState:             return "Bad intermediate state"
-      case .badCode(_, let description):      return description
-      case .code_404_notFound(let response):  return "404: \(response)"
+      case .badIntermediateState:                         return "Bad intermediate state"
+      case .badCode(let code, let description):           return "\(code): \(description)"
+      case .code_404_notFound(let response):              return "404: \(response)"
+      case .code_429_awsTooManyRequests(let response):    return "429: \(response)"
       }
     }
   }
