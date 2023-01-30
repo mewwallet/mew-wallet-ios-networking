@@ -10,7 +10,7 @@ public protocol SocketDataBuilder {
 }
 
 public final class SocketDataBuilderImpl: SocketDataBuilder {
-  public var decoder: JSONDecoder!
+  public let decoder = JSONDecoder()
   
   public init() {}
 

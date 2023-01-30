@@ -10,21 +10,24 @@ import Foundation
 public enum NetworkResponseCode {
   case success
   case notFound
+  case aws_tooManyRequests
   case unknown(Int)
   
   init?(rawValue: Int) {
     switch rawValue {
     case 200:   self = .success
     case 404:   self = .notFound
+    case 429:   self = .aws_tooManyRequests
     default:    self = .unknown(rawValue)
     }
   }
   
   public var code: Int {
     switch self {
-    case .success:            return 200
-    case .notFound:           return 404
-    case .unknown(let code):  return code
+    case .success:              return 200
+    case .notFound:             return 404
+    case .aws_tooManyRequests:  return 429
+    case .unknown(let code):    return code
     }
   }
 }
