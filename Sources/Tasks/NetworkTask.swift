@@ -13,11 +13,13 @@ public final class NetworkTask {
   public enum Error: LocalizedError {
     case badIntermediateState
     case code_404_notFound(response: String)
+    case code_409_conflict(response: String)
     case code_429_awsTooManyRequests(response: String)
     case badCode(code: Int, response: String)
     
     init(code: Int, response: String) {
       switch code {
+      case NetworkResponseCode.conflict.code:             self = .code_409_conflict(response: response)
       case NetworkResponseCode.notFound.code:             self = .code_404_notFound(response: response)
       case NetworkResponseCode.aws_tooManyRequests.code:  self = .code_429_awsTooManyRequests(response: response)
       default:                                            self = .badCode(code: code, response: response)
@@ -29,6 +31,7 @@ public final class NetworkTask {
       case .badIntermediateState:                         return "Bad intermediate state"
       case .badCode(let code, let description):           return "\(code): \(description)"
       case .code_404_notFound(let response):              return "404: \(response)"
+      case .code_409_conflict(let response):              return "409: \(response)"
       case .code_429_awsTooManyRequests(let response):    return "429: \(response)"
       }
     }
@@ -80,7 +83,7 @@ public final class NetworkTask {
   }
   
   private func process<R>(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> R {
-    guard case .success = networkResponse.statusCode else {
+    guard networkResponse.statusCode.isSuccess else {
       if let body = networkResponse.data as? Data {
         throw Error(code: networkResponse.statusCode.code, response: String(data: body, encoding: .utf8) ?? "Unknown")
       } else {
