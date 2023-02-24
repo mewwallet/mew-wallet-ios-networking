@@ -75,6 +75,17 @@ public final class SocketNetworkClient: NetworkClient {
       throw SocketClientError.badFormat
     }
     
+    Logger.debug(system: .socketNetworkClient,
+      """
+      
+      ==========New socket task:==========
+      Subscription: \(request.subscription)
+      PublisherId: \(request.publisherId ?? "<none>")
+      Request: \(request.request)
+      =====================================
+      """
+    )
+    
     return try await withCheckedThrowingContinuation { continuation in
       Task {
         var passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
@@ -194,6 +205,7 @@ extension SocketNetworkClient {
   }
   
   private func connect() {
+    Logger.debug(.socketNetworkClient, ">> Connect to: \(String(describing: socket.request.url))")
     if Thread.isMainThread {
       socket.connect()
     } else {
@@ -204,6 +216,7 @@ extension SocketNetworkClient {
   }
   
   private func disconnect() {
+    Logger.debug(.socketNetworkClient, ">> Disconnect from: \(String(describing: socket.request.url))")
     if Thread.isMainThread {
       socket.disconnect()
       isConnected = false
@@ -216,6 +229,7 @@ extension SocketNetworkClient {
   }
   
   func reconnect() {
+    Logger.debug(.socketNetworkClient, ">> Reconnect to: \(String(describing: socket.request.url))")
     if Thread.isMainThread {
       disconnect()
       connect()
@@ -272,6 +286,7 @@ extension SocketNetworkClient: WebSocketDelegate {
         socket.write(pong: Data())
         
       case .viabilityChanged(let viability):
+        Logger.debug(.socketNetworkClient, ">>> viabilityChanged(\(viability))")
         if !viability {
           self.reconnect()
         }
