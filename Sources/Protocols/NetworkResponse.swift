@@ -10,6 +10,7 @@ import Foundation
 public enum NetworkResponseCode {
   case success                // 200
   case accepted               // 202
+  case badRequest             // 400
   case notFound               // 404
   case conflict               // 409
   case aws_tooManyRequests    // 429
@@ -19,6 +20,7 @@ public enum NetworkResponseCode {
     switch rawValue {
     case 200:   self = .success
     case 202:   self = .accepted
+    case 400:   self = .badRequest
     case 404:   self = .notFound
     case 409:   self = .conflict
     case 429:   self = .aws_tooManyRequests
@@ -30,6 +32,7 @@ public enum NetworkResponseCode {
     switch self {
     case .success:              return 200
     case .accepted:             return 202
+    case .badRequest:           return 400
     case .notFound:             return 404
     case .conflict:             return 409
     case .aws_tooManyRequests:  return 429

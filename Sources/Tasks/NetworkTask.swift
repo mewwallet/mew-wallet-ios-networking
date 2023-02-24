@@ -10,8 +10,9 @@ import Combine
 import mew_wallet_ios_extensions
 
 public final class NetworkTask {
-  public enum Error: LocalizedError {
+  public enum Error: LocalizedError, Equatable {
     case badIntermediateState
+    case code_400_badRequest(response: String)
     case code_404_notFound(response: String)
     case code_409_conflict(response: String)
     case code_429_awsTooManyRequests(response: String)
@@ -19,6 +20,7 @@ public final class NetworkTask {
     
     init(code: Int, response: String) {
       switch code {
+      case NetworkResponseCode.badRequest.code:           self = .code_400_badRequest(response: response)
       case NetworkResponseCode.conflict.code:             self = .code_409_conflict(response: response)
       case NetworkResponseCode.notFound.code:             self = .code_404_notFound(response: response)
       case NetworkResponseCode.aws_tooManyRequests.code:  self = .code_429_awsTooManyRequests(response: response)
@@ -30,6 +32,7 @@ public final class NetworkTask {
       switch self {
       case .badIntermediateState:                         return "Bad intermediate state"
       case .badCode(let code, let description):           return "\(code): \(description)"
+      case .code_400_badRequest(let response):            return "400: \(response)"
       case .code_404_notFound(let response):              return "404: \(response)"
       case .code_409_conflict(let response):              return "409: \(response)"
       case .code_429_awsTooManyRequests(let response):    return "429: \(response)"
