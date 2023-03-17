@@ -10,7 +10,7 @@ public final class SocketNetworkClient: NetworkClient {
   private let headers: Headers
   
   public var dataBuilder: SocketDataBuilder!
-  private var requestsHandler: SocketRequestsHandler = .init()
+  private let requestsHandler: NetworkRequestsHandler = .init()
     
   private lazy var socket: WebSocket = {
     let request = self.dataBuilder.buildConnectionRequest(
@@ -99,7 +99,7 @@ public final class SocketNetworkClient: NetworkClient {
             if let storedPassthrough = await self.requestsHandler.publisher(for: id, publisherId: publisherId)?.publisher {
               passthrough = storedPassthrough
             }
-            let publisher = SocketClientPublisher(publisher: passthrough)
+            let publisher = NetworkClientPublisher(publisher: passthrough)
             try await self.send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
@@ -123,7 +123,7 @@ public final class SocketNetworkClient: NetworkClient {
 extension SocketNetworkClient {
   private func send(
     request: NetworkRequest,
-    publisher: SocketClientPublisher
+    publisher: NetworkClientPublisher
   ) async throws {
     Logger.debug(.socketNetworkClient,
           """
@@ -169,7 +169,7 @@ extension SocketNetworkClient {
     _ = socket // initialize socket
     
     do {
-      let publisher = SocketClientPublisher(continuation: continuation)
+      let publisher = NetworkClientPublisher(continuation: continuation)
       if self.isConnected == nil {
         await self.requestsHandler.addToPool(request: (request, false, publisher))
         return

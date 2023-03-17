@@ -9,6 +9,8 @@ import Foundation
 
 public protocol NetworkRequest {
   var request: Any? { get }
+  var publisherId: String? { get set }
+  var subscription: Bool { get set }
   
   init(request: Any?)
 }

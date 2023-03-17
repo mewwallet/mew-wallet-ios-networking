@@ -47,7 +47,9 @@ public struct RESTRequestModel: NetworkRequestModel {
   public var method: Method = .get
   public var headers: Headers?
   public var body: Data?
-  
+  public var publisherId: String?
+  public var subscription: Bool = false
+
   // MARK: - Modifiers
   
   public func baseURL(_ url :URL?) -> Self {
@@ -80,15 +82,33 @@ public struct RESTRequestModel: NetworkRequestModel {
     return `self`
   }
   
-  public init(baseURL: URL? = nil,
-              networkPath: NetworkPath? = nil,
-              method: Method = .get,
-              headers: Headers? = nil,
-              body: Data? = nil) {
+  public func subscription(_ subscription: Bool) -> Self {
+    var `self` = self
+    `self`.self.subscription = subscription
+    return `self`
+  }
+  
+  public func publisherId(_ publisherId: String?) -> Self {
+    var `self` = self
+    `self`.self.publisherId = publisherId
+    return `self`
+  }
+  
+  public init(
+    baseURL: URL? = nil,
+    networkPath: NetworkPath? = nil,
+    method: Method = .get,
+    headers: Headers? = nil,
+    body: Data? = nil,
+    subscription: Bool = false,
+    publisherId: String? = nil
+  ) {
     self.baseURL = baseURL
     self.networkPath = networkPath
     self.method = method
     self.headers = headers
     self.body = body
+    self.subscription = subscription
+    self.publisherId = publisherId
   }
 }

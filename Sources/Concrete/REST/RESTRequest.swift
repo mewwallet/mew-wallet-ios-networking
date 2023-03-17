@@ -11,7 +11,9 @@ struct RESTRequest: NetworkRequest {
   // MARK: - NetworkRequest
   
   var request: Any?
-  
+  var subscription: Bool = false
+  var publisherId: String? = nil
+
   init(request: Any?) {
     self.request = request
   }

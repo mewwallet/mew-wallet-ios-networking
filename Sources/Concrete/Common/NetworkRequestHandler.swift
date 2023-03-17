@@ -5,24 +5,25 @@ import mew_wallet_ios_extensions
 // swiftlint:disable large_tuple
 typealias SocketClientResult = Result<NetworkResponse, Error>
 
-final actor SocketRequestsHandler {
+final actor NetworkRequestsHandler {
   private var dataPool: [(ValueWrapper, Data)] = []
-  private var pool: [(NetworkRequest, Bool, SocketClientPublisher)] = []
-  private var publishers: [ValueWrapper: (SocketClientPublisher, Bool)] = [:]
-  private var commonPublishers: [ValueWrapper: SocketClientPublisher] = [:]
+  private var pool: [(NetworkRequest, Bool, NetworkClientPublisher)] = []
+  private var publishers: [ValueWrapper: (NetworkClientPublisher, Bool)] = [:]
+  private var commonPublishers: [ValueWrapper: NetworkClientPublisher] = [:]
   
   var subscriptionId: ValueWrapper? {
     return self.publishers.first(where: { $0.value.1 })?.key
   }
   
-  func publisher(for requestId: ValueWrapper, publisherId: ValueWrapper?) -> SocketClientPublisher? {
+  func publisher(for requestId: ValueWrapper? = nil, publisherId: ValueWrapper?) -> NetworkClientPublisher? {
     if let publisherId = publisherId, let publisher = commonPublishers[publisherId] {
       return publisher
     }
+    guard let requestId = requestId else { return nil }
     return publishers[requestId]?.0
   }
   
-  func add(publisher: SocketClientPublisher, subscription: Bool, for id: ValueWrapper) {
+  func add(publisher: NetworkClientPublisher, subscription: Bool, for id: ValueWrapper) {
     self.publishers[id] = (publisher, subscription)
   }
   
@@ -35,7 +36,7 @@ final actor SocketRequestsHandler {
     }
     
     let passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
-    let publisher = SocketClientPublisher(publisher: passthrough)
+    let publisher = NetworkClientPublisher(publisher: passthrough)
     commonPublishers[id] = publisher
   }
   
@@ -97,7 +98,7 @@ final actor SocketRequestsHandler {
   
   // MARK: - Pool of requests
   
-  func addToPool(request: (NetworkRequest, Bool, SocketClientPublisher)) {
+  func addToPool(request: (NetworkRequest, Bool, NetworkClientPublisher)) {
     self.pool.append(request)
   }
   
@@ -105,7 +106,7 @@ final actor SocketRequestsHandler {
     self.dataPool.append(data)
   }
   
-  func drainPool() -> [(NetworkRequest, Bool, SocketClientPublisher)] {
+  func drainPool() -> [(NetworkRequest, Bool, NetworkClientPublisher)] {
     let pool = self.pool
     self.pool.removeAll()
     return pool

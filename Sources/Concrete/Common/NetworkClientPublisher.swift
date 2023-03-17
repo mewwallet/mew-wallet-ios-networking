@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-struct SocketClientPublisher {
+struct NetworkClientPublisher {
   let publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>?
   let continuation: CheckedContinuation<Any, Error>?
   

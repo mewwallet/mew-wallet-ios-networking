@@ -61,6 +61,10 @@ final class RESTRequestBuilder: NetworkRequestBuilder {
     config.headers?.forEach {
       request.setValue($0.value, forHTTPHeaderField: $0.key)
     }
-    return RESTRequest(request: request)
+    var restRequest = RESTRequest(request: request)
+    restRequest.subscription = config.subscription
+    restRequest.publisherId = config.publisherId
+    
+    return restRequest
   }
 }
