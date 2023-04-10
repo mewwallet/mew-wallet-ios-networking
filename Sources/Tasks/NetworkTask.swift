@@ -15,6 +15,7 @@ public final class NetworkTask {
     case code_400_badRequest(response: String)
     case code_404_notFound(response: String)
     case code_409_conflict(response: String)
+    case code_424_failedDependency(response: String)
     case code_429_awsTooManyRequests(response: String)
     case badCode(code: Int, response: String)
     
@@ -23,6 +24,7 @@ public final class NetworkTask {
       case NetworkResponseCode.badRequest.code:           self = .code_400_badRequest(response: response)
       case NetworkResponseCode.conflict.code:             self = .code_409_conflict(response: response)
       case NetworkResponseCode.notFound.code:             self = .code_404_notFound(response: response)
+      case NetworkResponseCode.failedDependency.code:     self = .code_424_failedDependency(response: response)
       case NetworkResponseCode.aws_tooManyRequests.code:  self = .code_429_awsTooManyRequests(response: response)
       default:                                            self = .badCode(code: code, response: response)
       }
@@ -35,6 +37,7 @@ public final class NetworkTask {
       case .code_400_badRequest(let response):            return "400: \(response)"
       case .code_404_notFound(let response):              return "404: \(response)"
       case .code_409_conflict(let response):              return "409: \(response)"
+      case .code_424_failedDependency(let response):      return "424: \(response)"
       case .code_429_awsTooManyRequests(let response):    return "429: \(response)"
       }
     }
