@@ -13,6 +13,7 @@ public enum NetworkResponseCode {
   case badRequest             // 400
   case notFound               // 404
   case conflict               // 409
+  case failedDependency       // 424
   case aws_tooManyRequests    // 429
   case unknown(Int)
   
@@ -23,6 +24,7 @@ public enum NetworkResponseCode {
     case 400:   self = .badRequest
     case 404:   self = .notFound
     case 409:   self = .conflict
+    case 424:   self = .failedDependency
     case 429:   self = .aws_tooManyRequests
     default:    self = .unknown(rawValue)
     }
@@ -35,6 +37,7 @@ public enum NetworkResponseCode {
     case .badRequest:           return 400
     case .notFound:             return 404
     case .conflict:             return 409
+    case .failedDependency:     return 424
     case .aws_tooManyRequests:  return 429
     case .unknown(let code):    return code
     }
