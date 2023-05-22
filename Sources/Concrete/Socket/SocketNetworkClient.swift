@@ -75,13 +75,13 @@ public final class SocketNetworkClient: NetworkClient {
       throw SocketClientError.badFormat
     }
     
-    Logger.debug(system: .socketNetworkClient,
+    Logger.debug(.socketNetworkClient,
       """
       
       ==========New socket task:==========
       Subscription: \(request.subscription)
       PublisherId: \(request.publisherId ?? "<none>")
-      Request: \(request.request)
+      Request: \(String(describing: request.request))
       =====================================
       """
     )

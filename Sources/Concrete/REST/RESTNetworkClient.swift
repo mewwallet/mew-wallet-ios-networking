@@ -24,7 +24,7 @@ public final class RESTClient: NetworkClient {
   public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request.request as? URLRequest else { throw NetworkClientError.invalidRequest }
     
-    Logger.debug(system: .restNetworkClient,
+    Logger.debug(.restNetworkClient,
       """
       
       ==========New network task:==========
@@ -37,7 +37,7 @@ public final class RESTClient: NetworkClient {
     do {
       let (data, response) = try await session.safeData(for: request)
       
-      Logger.debug(system: .restNetworkClient,
+      Logger.debug(.restNetworkClient,
         """
         
         =====Network task did finished:=====
@@ -51,7 +51,7 @@ public final class RESTClient: NetworkClient {
         return RESTResponse(nil, data: data, statusCode: .success)
       }
     } catch {
-      Logger.error(system: .restNetworkClient,
+      Logger.error(.restNetworkClient,
       """
       
       =====Network task did finished:=====
