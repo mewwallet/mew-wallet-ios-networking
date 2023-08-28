@@ -11,6 +11,7 @@ import mew_wallet_ios_extensions
 
 public final class NetworkTask {
   public enum Error: LocalizedError, Equatable {
+    case aborted
     case badIntermediateState
     case code_400_badRequest(response: String)
     case code_404_notFound(response: String)
@@ -32,6 +33,7 @@ public final class NetworkTask {
     
     public var errorDescription: String? {
       switch self {
+      case .aborted:                                      return "Aborted"
       case .badIntermediateState:                         return "Bad intermediate state"
       case .badCode(let code, let description):           return "\(code): \(description)"
       case .code_400_badRequest(let response):            return "400: \(response)"
@@ -47,7 +49,8 @@ public final class NetworkTask {
   
   public func run<R>(config: NetworkRequestConfig) async throws -> R {
     return try await withCheckedThrowingContinuation { continuation in
-      Task {
+      Task {[weak self] in
+        guard let self else { return continuation.resume(throwing: Error.aborted) }
         do {
           /// Build an request
           let builder: NetworkRequestBuilder
@@ -66,10 +69,10 @@ public final class NetworkTask {
           let response = try await task_request.process(request)
           if let publisher = response as? AnyPublisher<Result<NetworkResponse, Swift.Error>, Never> {
             let mapped = publisher
-              .asyncMap { [weak self] response -> Any? in
+              .asyncMap { response -> Any? in
                 switch response {
                 case .success(let response):
-                  return try await self?.process(networkResponse: response, config: config)
+                  return try await self.process(networkResponse: response, config: config)
                 case .failure(let error):
                   throw error
                 }

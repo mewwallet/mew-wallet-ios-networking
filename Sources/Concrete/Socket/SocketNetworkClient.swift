@@ -31,7 +31,8 @@ public final class SocketNetworkClient: NetworkClient {
         return
       }
       
-      Task {
+      Task {[weak self] in
+        guard let self else { return }
         if isConnected {
           let pool = await self.requestsHandler.drainPool()
           for val in pool {
@@ -87,14 +88,15 @@ public final class SocketNetworkClient: NetworkClient {
     )
     
     return try await withCheckedThrowingContinuation { continuation in
-      Task {
+      Task {[weak self] in
+        guard let self else { return continuation.resume(throwing: NetworkTask.Error.aborted) }
         var passthrough = PassthroughSubject<Result<NetworkResponse, Error>, Never>()
         do {
           let (id, _) = try self.dataBuilder.unwrap(request: request)
 
           if request.subscription {
             let publisherId = request.publisherId.map { ValueWrapper.stringValue($0) }
-            await requestsHandler.registerCommonPublisher(for: publisherId)
+            await self.requestsHandler.registerCommonPublisher(for: publisherId)
 
             if let storedPassthrough = await self.requestsHandler.publisher(for: id, publisherId: publisherId)?.publisher {
               passthrough = storedPassthrough
@@ -103,7 +105,7 @@ public final class SocketNetworkClient: NetworkClient {
             try await self.send(request: request, publisher: publisher)
             continuation.resume(returning: passthrough.eraseToAnyPublisher())
           } else {
-            try await send(
+            try await self.send(
               request: request,
               continuation: continuation
             )
@@ -221,7 +223,7 @@ extension SocketNetworkClient {
       socket.disconnect()
       isConnected = false
     } else {
-      DispatchQueue.main.async {
+      DispatchQueue.main.sync {
         self.socket.disconnect()
         self.isConnected = false
       }
@@ -243,7 +245,7 @@ extension SocketNetworkClient {
 }
 
 extension SocketNetworkClient: WebSocketDelegate {
-  public func didReceive(event: WebSocketEvent, client: WebSocket) {
+  public func didReceive(event: Starscream.WebSocketEvent, client: Starscream.WebSocketClient) {
     Task {
       switch event {
       case .text(let text):
