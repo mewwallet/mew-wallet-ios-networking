@@ -48,7 +48,7 @@ public final class NetworkTask {
   public static let shared = NetworkTask()
   
   public func run<R>(config: NetworkRequestConfig) async throws -> R {
-    return try await withCheckedThrowingContinuation { continuation in
+    return try await withCheckedThrowingContinuation {[weak self] continuation in
       Task {[weak self] in
         guard let self else { return continuation.resume(throwing: Error.aborted) }
         do {
