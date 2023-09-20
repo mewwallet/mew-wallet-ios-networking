@@ -68,7 +68,10 @@ public final class SocketNetworkClient: NetworkClient {
   }
   
   deinit {
-    self.disconnect()
+    socket.disconnect()
+    Task {[handler = self.requestsHandler] in
+      await handler.send(error: SocketClientError.noConnection, includingSubscription: true)
+    }
   }
   
   public func send(request: NetworkRequest) async throws -> Any {
@@ -206,41 +209,21 @@ extension SocketNetworkClient {
     self.socket.write(data: data)
   }
   
-  private func connect() {
+  @MainActor func connect() {
     Logger.debug(.socketNetworkClient, ">> Connect to: \(String(describing: socket.request.url))")
-    if Thread.isMainThread {
-      socket.connect()
-    } else {
-      DispatchQueue.main.async {
-        self.socket.connect()
-      }
-    }
+    socket.connect()
   }
   
-  private func disconnect() {
+  @MainActor func disconnect() {
     Logger.debug(.socketNetworkClient, ">> Disconnect from: \(String(describing: socket.request.url))")
-    if Thread.isMainThread {
-      socket.disconnect()
-      isConnected = false
-    } else {
-      DispatchQueue.main.sync {
-        self.socket.disconnect()
-        self.isConnected = false
-      }
-    }
+    socket.disconnect()
+    isConnected = false
   }
   
-  func reconnect() {
+  @MainActor func reconnect() {
     Logger.debug(.socketNetworkClient, ">> Reconnect to: \(String(describing: socket.request.url))")
-    if Thread.isMainThread {
-      disconnect()
-      connect()
-    } else {
-      DispatchQueue.main.async {
-        self.disconnect()
-        self.connect()
-      }
-    }
+    disconnect()
+    connect()
   }
 }
 
@@ -271,26 +254,27 @@ extension SocketNetworkClient: WebSocketDelegate {
         
       case .cancelled:
         Logger.debug(.socketNetworkClient, ">>> cancelled")
-        self.reconnect()
+        await self.reconnect()
         
       case let .error(error):
         Logger.debug(.socketNetworkClient, ">>> error: \(error?.localizedDescription ?? "<empty>")")
-        self.reconnect()
+        await self.reconnect()
         
       case .disconnected:
         Logger.debug(.socketNetworkClient, ">>> disconnected")
-        self.reconnect()
+        await self.reconnect()
         
       case .connected:
         Logger.debug(.socketNetworkClient, ">>> connected")
         self.isConnected = true
+        
       case .ping:
         socket.write(pong: Data())
         
       case .viabilityChanged(let viability):
         Logger.debug(.socketNetworkClient, ">>> viabilityChanged(\(viability))")
         if !viability {
-          self.reconnect()
+          await self.reconnect()
         }
       default:
         Logger.debug(.socketNetworkClient, String(describing: event))
