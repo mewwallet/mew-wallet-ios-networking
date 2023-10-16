@@ -12,6 +12,7 @@ public enum NetworkResponseCode {
   case accepted               // 202
   case badRequest             // 400
   case notFound               // 404
+  case notAcceptable          // 406
   case conflict               // 409
   case failedDependency       // 424
   case aws_tooManyRequests    // 429
@@ -23,6 +24,7 @@ public enum NetworkResponseCode {
     case 202:   self = .accepted
     case 400:   self = .badRequest
     case 404:   self = .notFound
+    case 406:   self = .notAcceptable
     case 409:   self = .conflict
     case 424:   self = .failedDependency
     case 429:   self = .aws_tooManyRequests
@@ -36,6 +38,7 @@ public enum NetworkResponseCode {
     case .accepted:             return 202
     case .badRequest:           return 400
     case .notFound:             return 404
+    case .notAcceptable:        return 406
     case .conflict:             return 409
     case .failedDependency:     return 424
     case .aws_tooManyRequests:  return 429
