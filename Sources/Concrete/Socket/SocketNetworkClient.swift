@@ -111,7 +111,7 @@ public final class SocketNetworkClient: NetworkClient {
   private var reconnectTask: Task<Void, Never>?
   private let reconnectLock = NSLock()
   
-  func startReconnectionTimer() {
+  private func startReconnectionTimer() {
     reconnectLock.withLock {
       reconnectTask = Task(priority: .utility) {[weak self] in
         do {
@@ -123,7 +123,7 @@ public final class SocketNetworkClient: NetworkClient {
     }
   }
   
-  func stopReconnectionTimer() {
+  private func stopReconnectionTimer() {
     reconnectLock.withLock {
       reconnectTask?.cancel()
       reconnectTask = nil
@@ -136,7 +136,8 @@ public final class SocketNetworkClient: NetworkClient {
   private let pingLock = NSLock()
   private var pingPongCount: Int = 0
   
-  func startPing() {
+  private func startPing() {
+    self.resetPing()
     pingLock.withLock {
       guard pingTask == nil else { return }
       self.pingTask = Task(priority: .utility) {[weak self] in
@@ -154,14 +155,14 @@ public final class SocketNetworkClient: NetworkClient {
     }
   }
   
-  func stopPing() {
+  private func stopPing() {
     pingLock.withLock {
       self.pingTask?.cancel()
       self.pingTask = nil
     }
   }
   
-  func increasePing() {
+  private func increasePing() {
     pingLock.withLock {
       self.pingPongCount += 1
       guard pingPongCount >= 3 else { return }
@@ -171,9 +172,15 @@ public final class SocketNetworkClient: NetworkClient {
     }
   }
   
-  func decreasePing() {
+  private func decreasePing() {
     pingLock.withLock {
       self.pingPongCount -= 1
+    }
+  }
+  
+  private func resetPing() {
+    pingLock.withLock {
+      self.pingPongCount = 0
     }
   }
   
