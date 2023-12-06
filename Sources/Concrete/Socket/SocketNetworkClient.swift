@@ -6,6 +6,12 @@ import mew_wallet_ios_logger
 import os
 
 public final class SocketNetworkClient: NetworkClient {
+  enum ConnectionState {
+    case disconnected
+    case reconnecting
+    case connecting
+    case connected
+  }
   private let url: URL
   private let headers: Headers
   
@@ -13,27 +19,41 @@ public final class SocketNetworkClient: NetworkClient {
   private var requestsHandler: SocketRequestsHandler = .init()
     
   private lazy var socket: WebSocket = {
-    let request = self.dataBuilder.buildConnectionRequest(
-      url: self.url,
-      headers: self.headers
-    )
-    let socket = WebSocket(request: request)
-    socket.delegate = self
-    DispatchQueue.main.async {
-      socket.connect()
-    }
-    return socket
+    return newClient()
   }()
   
-  private var isConnected: Bool? {
+  private var connectionState: ConnectionState = .disconnected {
     didSet {
-      guard let isConnected = isConnected else {
-        return
-      }
-      
-      Task {[weak self] in
-        guard let self else { return }
-        if isConnected {
+      switch self.connectionState {
+      case .disconnected:
+        self.stopPing()
+        self.stopReconnectionTimer()
+        
+        Task {[weak self] in
+          await self?.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
+        }
+      case .reconnecting:
+        self.stopPing()
+        self.startReconnectionTimer()
+        
+        Task {[weak self] in
+          await self?.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
+        }
+      case .connecting:
+        self.stopPing()
+        self.stopReconnectionTimer()
+        
+        if oldValue == .connected {
+          Task {[weak self] in
+            await self?.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
+          }
+        }
+      case .connected:
+        self.startPing()
+        self.stopReconnectionTimer()
+        
+        Task {[weak self] in
+          guard let self else { return }
           let pool = await self.requestsHandler.drainPool()
           for val in pool {
             if val.1 {
@@ -50,12 +70,8 @@ public final class SocketNetworkClient: NetworkClient {
               await self.send(id: value.0, data: value.1)
             }
           }
-          if oldValue == false {
+          if oldValue != .connected {
             await self.requestsHandler.sendReconnectedEvent()
-          }
-        } else {
-          if oldValue == true {
-            await self.requestsHandler.send(error: SocketClientError.noConnection, includingSubscription: true)
           }
         }
       }
@@ -73,6 +89,102 @@ public final class SocketNetworkClient: NetworkClient {
       await handler.send(error: SocketClientError.noConnection, includingSubscription: true)
     }
   }
+  
+  // MARK: - Client Management
+  
+  private func newClient() -> WebSocket {
+    let request = self.dataBuilder.buildConnectionRequest(
+      url: self.url,
+      headers: self.headers
+    )
+    let socket = WebSocket(request: request)
+    socket.delegate = self
+    socket.respondToPingWithPong = true
+    DispatchQueue.main.async {
+      self.connect()
+    }
+    return socket
+  }
+  
+  // MARK: - Reconnection
+  
+  private var reconnectTask: Task<Void, Never>?
+  private let reconnectLock = NSLock()
+  
+  private func startReconnectionTimer() {
+    reconnectLock.withLock {
+      reconnectTask = Task(priority: .utility) {[weak self] in
+        do {
+          try await Task.sleep(nanoseconds: 5_000_000_000)
+          await self?.reconnect(force: true)
+        } catch {
+        }
+      }
+    }
+  }
+  
+  private func stopReconnectionTimer() {
+    reconnectLock.withLock {
+      reconnectTask?.cancel()
+      reconnectTask = nil
+    }
+  }
+  
+  // MARK: - Ping/Pong
+  
+  private var pingTask: Task<Void, Never>?
+  private let pingLock = NSLock()
+  private var pingPongCount: Int = 0
+  
+  private func startPing() {
+    self.resetPing()
+    pingLock.withLock {
+      guard pingTask == nil else { return }
+      self.pingTask = Task(priority: .utility) {[weak self] in
+        do {
+          while !Task.isCancelled {
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            Task { @MainActor [weak self] in
+              self?.increasePing()
+              self?.socket.write(ping: Data())
+            }
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  
+  private func stopPing() {
+    pingLock.withLock {
+      self.pingTask?.cancel()
+      self.pingTask = nil
+    }
+  }
+  
+  private func increasePing() {
+    pingLock.withLock {
+      self.pingPongCount += 1
+      guard pingPongCount >= 3 else { return }
+      Task {[weak self] in
+        await self?.reconnect(force: true)
+      }
+    }
+  }
+  
+  private func decreasePing() {
+    pingLock.withLock {
+      self.pingPongCount -= 1
+    }
+  }
+  
+  private func resetPing() {
+    pingLock.withLock {
+      self.pingPongCount = 0
+    }
+  }
+  
+  // MARK: - Send
   
   public func send(request: NetworkRequest) async throws -> Any {
     guard let request = request as? SocketRequest else {
@@ -139,7 +251,7 @@ extension SocketNetworkClient {
     _ = socket // initialize socket
     
     do {
-      guard self.isConnected ?? false else {
+      guard self.connectionState == .connected else {
         await self.requestsHandler.addToPool(request: (request, true, publisher))
         return
       }
@@ -175,12 +287,12 @@ extension SocketNetworkClient {
     
     do {
       let publisher = SocketClientPublisher(continuation: continuation)
-      if self.isConnected == nil {
+      if self.connectionState == .connecting {
         await self.requestsHandler.addToPool(request: (request, false, publisher))
         return
       }
 
-      guard self.isConnected ?? false else {
+      guard self.connectionState == .connected else {
         throw SocketClientError.noConnection
       }
       let (id, payload) = try self.dataBuilder.unwrap(request: request)
@@ -202,7 +314,7 @@ extension SocketNetworkClient {
   
   private func send(id: ValueWrapper, data: Data) async {
     await requestsHandler.registerCommonPublisher(for: id)
-    guard self.isConnected ?? false else {
+    guard self.connectionState == .connected else {
       await self.requestsHandler.addToPool(data: (id, data))
       return
     }
@@ -210,20 +322,26 @@ extension SocketNetworkClient {
   }
   
   @MainActor func connect() {
+    guard connectionState == .disconnected else { return }
+    connectionState = .connecting
     Logger.debug(.socketNetworkClient, ">> Connect to: \(String(describing: socket.request.url))")
     socket.connect()
   }
   
   @MainActor func disconnect() {
+    guard connectionState != .disconnected else { return }
+    connectionState = .disconnected
     Logger.debug(.socketNetworkClient, ">> Disconnect from: \(String(describing: socket.request.url))")
     socket.disconnect()
-    isConnected = false
   }
   
-  @MainActor func reconnect() {
+  @MainActor func reconnect(force: Bool) {
+    guard force || connectionState != .reconnecting else { return }
     Logger.debug(.socketNetworkClient, ">> Reconnect to: \(String(describing: socket.request.url))")
-    disconnect()
-    connect()
+    connectionState = .reconnecting
+    socket.disconnect()
+    self.socket = self.newClient()
+    socket.connect()
   }
 }
 
@@ -254,27 +372,28 @@ extension SocketNetworkClient: WebSocketDelegate {
         
       case .cancelled:
         Logger.debug(.socketNetworkClient, ">>> cancelled")
-        await self.reconnect()
+        await self.reconnect(force: false)
         
       case let .error(error):
         Logger.debug(.socketNetworkClient, ">>> error: \(error?.localizedDescription ?? "<empty>")")
-        await self.reconnect()
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        await self.reconnect(force: false)
         
       case .disconnected:
         Logger.debug(.socketNetworkClient, ">>> disconnected")
-        await self.reconnect()
+        await self.reconnect(force: false)
         
       case .connected:
         Logger.debug(.socketNetworkClient, ">>> connected")
-        self.isConnected = true
+        self.connectionState = .connected
         
-      case .ping:
-        socket.write(pong: Data())
+      case .pong:
+        self.decreasePing()
         
       case .viabilityChanged(let viability):
         Logger.debug(.socketNetworkClient, ">>> viabilityChanged(\(viability))")
         if !viability {
-          await self.reconnect()
+          await self.reconnect(force: false)
         }
       default:
         Logger.debug(.socketNetworkClient, String(describing: event))
