@@ -19,6 +19,7 @@ public final class SocketDataBuilderImpl: SocketDataBuilder {
     headers.forEach {
       request.addValue($0.value, forHTTPHeaderField: $0.key)
     }
+    request.timeoutInterval = 15
     return request
   }
   
