@@ -22,7 +22,7 @@ public final class SocketNetworkClient: NetworkClient {
     return newClient()
   }()
   
-  private var connectionState: ConnectionState = .disconnected {
+  private var connectionState: ConnectionState = .connecting {
     didSet {
       switch self.connectionState {
       case .disconnected:
@@ -101,7 +101,7 @@ public final class SocketNetworkClient: NetworkClient {
     socket.delegate = self
     socket.respondToPingWithPong = true
     DispatchQueue.main.async {
-      self.connect()
+      self.connect(force: true)
     }
     return socket
   }
@@ -321,8 +321,8 @@ extension SocketNetworkClient {
     self.socket.write(data: data)
   }
   
-  @MainActor func connect() {
-    guard connectionState == .disconnected else { return }
+  @MainActor func connect(force: Bool) {
+    guard connectionState == .disconnected || force else { return }
     connectionState = .connecting
     Logger.debug(.socketNetworkClient, ">> Connect to: \(String(describing: socket.request.url))")
     socket.connect()
