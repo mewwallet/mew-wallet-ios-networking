@@ -1,34 +1,32 @@
 {
-  "object": {
-    "pins": [
-      {
-        "package": "mew-wallet-ios-extensions",
-        "repositoryURL": "git@github.com:mewwallet/mew-wallet-ios-extensions.git",
-        "state": {
-          "branch": null,
-          "revision": "ae20cf3b5c198e354ff2477004e74cda2a4ced96",
-          "version": "1.0.19"
-        }
-      },
-      {
-        "package": "mew-wallet-ios-logger",
-        "repositoryURL": "git@github.com:mewwallet/mew-wallet-ios-logger.git",
-        "state": {
-          "branch": null,
-          "revision": "fab448eb8e7f3552b5423996d5a060f6a3d94f4c",
-          "version": "1.0.0"
-        }
-      },
-      {
-        "package": "Starscream",
-        "repositoryURL": "https://github.com/daltoniam/Starscream.git",
-        "state": {
-          "branch": null,
-          "revision": "df8d82047f6654d8e4b655d1b1525c64e1059d21",
-          "version": "4.0.4"
-        }
+  "pins" : [
+    {
+      "identity" : "starscream",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/daltoniam/Starscream.git",
+      "state" : {
+        "revision" : "ac6c0fc9da221873e01bd1a0d4818498a71eef33",
+        "version" : "4.0.6"
       }
-    ]
-  },
-  "version": 1
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "revision" : "e97a6fcb1ab07462881ac165fdbb37f067e205d5",
+        "version" : "1.5.4"
+      }
+    },
+    {
+      "identity" : "swift-log-syslog",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ianpartridge/swift-log-syslog.git",
+      "state" : {
+        "revision" : "654ea6e32b9802c45468c4c743ed507c36a775c2",
+        "version" : "1.0.2"
+      }
+    }
+  ],
+  "version" : 2
 }
