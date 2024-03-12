@@ -346,34 +346,4 @@ struct WebSocketTests {
       }
     }
   }
-  
-//  @Test("Ыщьу", .timeLimit(.seconds(10)), .tags(.general), .tags(.tls), arguments: [Configuration.tlsAutoPinnedShortDelay], [(URL(string: "wss://nodesmw.mewapi.io:443/ws/eth")!, UInt16(0))])
-//  func someasd(configuration: Configuration, _ endpoint: (url: URL, port: UInt16)) async throws {
-//    try await withThrowingTaskGroup(of: Void.self) { group in
-//      let client = try #require(try WebSocket(url: endpoint.url, headers: [
-//        (name: "User-Agent", value: "MEWwallet"),
-//        (name: "Origin", value: "null")
-//      ], configuration: configuration.configuration))
-//      
-//      
-//      group.addTask {
-//        #expect(client.state == .disconnected)
-//        let expected: [WebSocket.Event] = []
-//        
-//        var events: [WebSocket.Event] = []
-//        for await event in client.connect() {
-//          events.append(event)
-//        }
-//        #expect(expected == events)
-//        #expect(client.state == .disconnected)
-//      }
-//      
-//      group.addTask {
-//        try await Task.sleep(nanoseconds: 3_000_000_000)
-//        try await client.send("{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\",\"params\":[\"0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5\", \"latest\"],\"id\":1}".data(using: .utf8)!)
-//        try await Task.sleep(nanoseconds: 3_000_000_000)
-//        client.disconnect()
-//      }
-//    }
-//  }
 }
