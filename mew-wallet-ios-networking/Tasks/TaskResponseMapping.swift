@@ -7,14 +7,14 @@
 
 import Foundation
 
-final class TaskResponseMapping {
+final class TaskResponseMapping: Sendable {
   let mapper: NetworkResponseMapper
   
   init(mapper: NetworkResponseMapper) {
     self.mapper = mapper
   }
   
-  func process(_ response: Any) async throws -> Any? {
-    return try await mapper.map(response)
+  func process(headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
+    return try await mapper.map(headers: headers, response: response)
   }
 }

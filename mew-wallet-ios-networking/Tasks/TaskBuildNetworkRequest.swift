@@ -7,14 +7,14 @@
 
 import Foundation
 
-final class TaskBuildNetworkRequest {
+final class TaskBuildNetworkRequest: Sendable {
   let builder: NetworkRequestBuilder
   
   init(builder: NetworkRequestBuilder) throws {
     self.builder = builder
   }
   
-  func process(_ model: NetworkRequestModel) async throws -> NetworkRequest {
+  func process(_ model: NetworkRequestModel) async throws -> any NetworkRequest {
     return try await builder.build(with: model)
   }
 }

@@ -7,6 +7,6 @@
 
 import Foundation
 
-public protocol NetworkResponseValidator {
-  func validate(_ response: Any) async throws
+public protocol NetworkResponseValidator: Sendable {
+  func validate(_ response: any Sendable) async throws
 }

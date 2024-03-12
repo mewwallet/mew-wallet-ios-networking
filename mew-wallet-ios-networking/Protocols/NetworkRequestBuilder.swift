@@ -7,6 +7,6 @@
 
 import Foundation
 
-protocol NetworkRequestBuilder {
-  func build(with config: NetworkRequestModel) async throws -> NetworkRequest
+protocol NetworkRequestBuilder: Sendable {
+  func build(with config: NetworkRequestModel) async throws -> any NetworkRequest
 }

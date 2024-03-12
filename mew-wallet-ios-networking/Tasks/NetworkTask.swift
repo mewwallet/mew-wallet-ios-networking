@@ -6,54 +6,54 @@
 //
 
 import Foundation
-import Combine
 import mew_wallet_ios_extensions
 
-public final class NetworkTask {
+public final class NetworkTask: Sendable {
   public enum Error: LocalizedError, Equatable {
     case aborted
     case badIntermediateState
     case code_400_badRequest(response: String)
+    case code_403_forbidden(response: String)
     case code_404_notFound(response: String)
     case code_406_notAcceptable(response: String)
     case code_409_conflict(response: String)
     case code_424_failedDependency(response: String)
+    case code_426_upgradeRequired(response: String)
     case code_429_awsTooManyRequests(response: String)
     case badCode(code: Int, response: String)
     
     init(code: Int, response: String) {
       switch code {
-      case NetworkResponseCode.badRequest.code:           self = .code_400_badRequest(response: response)
-      case NetworkResponseCode.conflict.code:             self = .code_409_conflict(response: response)
-      case NetworkResponseCode.notFound.code:             self = .code_404_notFound(response: response)
-      case NetworkResponseCode.notAcceptable.code:        self = .code_406_notAcceptable(response: response)
-      case NetworkResponseCode.failedDependency.code:     self = .code_424_failedDependency(response: response)
-      case NetworkResponseCode.aws_tooManyRequests.code:  self = .code_429_awsTooManyRequests(response: response)
-      default:                                            self = .badCode(code: code, response: response)
+      case NetworkResponseCode.badRequest.code:                 self = .code_400_badRequest(response: response)
+      case NetworkResponseCode.conflict.code:                   self = .code_409_conflict(response: response)
+      case NetworkResponseCode.notFound.code:                   self = .code_404_notFound(response: response)
+      case NetworkResponseCode.notAcceptable.code:              self = .code_406_notAcceptable(response: response)
+      case NetworkResponseCode.failedDependency.code:           self = .code_424_failedDependency(response: response)
+      case NetworkResponseCode.aws_tooManyRequests.code:        self = .code_429_awsTooManyRequests(response: response)
+      default:                                                  self = .badCode(code: code, response: response)
       }
     }
     
     public var errorDescription: String? {
       switch self {
-      case .aborted:                                      return "Aborted"
-      case .badIntermediateState:                         return "Bad intermediate state"
-      case .badCode(let code, let description):           return "\(code): \(description)"
-      case .code_400_badRequest(let response):            return "400: \(response)"
-      case .code_404_notFound(let response):              return "404: \(response)"
-      case .code_406_notAcceptable(let response):         return "406: \(response)"
-      case .code_409_conflict(let response):              return "409: \(response)"
-      case .code_424_failedDependency(let response):      return "424: \(response)"
-      case .code_429_awsTooManyRequests(let response):    return "429: \(response)"
+      case .aborted:                                            return "Aborted"
+      case .badIntermediateState:                               return "Bad intermediate state"
+      case .badCode(let code, let description):                 return "\(code): \(description)"
+      case .code_400_badRequest(let response):                  return "400: \(response)"
+      case .code_403_forbidden(response: let response):         return "403: \(response)"
+      case .code_404_notFound(let response):                    return "404: \(response)"
+      case .code_406_notAcceptable(let response):               return "406: \(response)"
+      case .code_409_conflict(let response):                    return "409: \(response)"
+      case .code_424_failedDependency(let response):            return "424: \(response)"
+      case .code_426_upgradeRequired(response: let response):   return "426: \(response)"
+      case .code_429_awsTooManyRequests(let response):          return "429: \(response)"
       }
     }
   }
   
-  public static let shared = NetworkTask()
-  
-  public func run<R>(config: NetworkRequestConfig) async throws -> R {
-    return try await withCheckedThrowingContinuation {[weak self] continuation in
-      Task {[weak self] in
-        guard let self else { return continuation.resume(throwing: Error.aborted) }
+  public static func run<R>(config: NetworkRequestConfig) async throws -> R {
+    return try await withCheckedThrowingContinuation { continuation in
+      Task {
         do {
           /// Build an request
           let builder: NetworkRequestBuilder
@@ -69,24 +69,39 @@ public final class NetworkTask {
           
           /// Execute the request
           let request = try await task_build.process(config.request.model)
-          let response = try await task_request.process(request)
-          if let publisher = response as? AnyPublisher<Result<NetworkResponse, Swift.Error>, Never> {
-            let mapped = publisher
-              .asyncMap {[weak self] response -> Any? in
-                guard let self else { throw Error.aborted }
-                switch response {
-                case .success(let response):
-                  return try await self.process(networkResponse: response, config: config)
-                case .failure(let error):
-                  throw error
-                }
+          
+          if R.self == Void.self {
+            if let response = try await task_request.processAndForget(request) {
+              if let response = response as? NetworkResponse {
+                try self.checkForError(networkResponse: response, config: config)
+                continuation.resume(returning: () as! R)
+              } else {
+                continuation.resume(throwing: NetworkTask.Error.badIntermediateState)
               }
-            continuation.resume(returning: mapped.eraseToAnyPublisher() as! R)
-          } else if let response = response as? NetworkResponse {
-            let result: R = try await process(networkResponse: response, config: config)
-            continuation.resume(returning: result)
-          } else if let commonPublisher = response as? AnyPublisher<(ValueWrapper, Data), Never> {
-            continuation.resume(returning: commonPublisher as! R)
+            } else {
+              continuation.resume(returning: () as! R)
+            }
+          } else {
+            let response = try await task_request.process(request)
+            if let publisher = response as? BroadcastAsyncStream<Result<any NetworkResponse, any Swift.Error>> {
+              let mapped = publisher
+                .mapValues { response -> (any Sendable)? in
+                  switch response {
+                  case .success(let response):
+                    return try await self.process(networkResponse: response, config: config)
+                  case .failure(let error):
+                    throw error
+                  }
+                }
+              continuation.resume(returning: mapped as! R)
+            } else if let response = response as? NetworkResponse {
+              let result: R = try await self.process(networkResponse: response, config: config)
+              continuation.resume(returning: result)
+            } else if let commonPublisher = response as? BroadcastAsyncStream<(IDWrapper, Data)> {
+              continuation.resume(returning: commonPublisher as! R)
+            } else {
+              continuation.resume(throwing: NetworkTask.Error.badIntermediateState)
+            }
           }
         } catch {
           continuation.resume(throwing: error)
@@ -95,7 +110,7 @@ public final class NetworkTask {
     }
   }
   
-  private func process<R>(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> R {
+  static private func checkForError(networkResponse: NetworkResponse, config: NetworkRequestConfig) throws {
     guard networkResponse.statusCode.isSuccess else {
       if let body = networkResponse.data as? Data {
         throw Error(code: networkResponse.statusCode.code, response: String(data: body, encoding: .utf8) ?? "Unknown")
@@ -103,9 +118,13 @@ public final class NetworkTask {
         throw Error(code: networkResponse.statusCode.code, response: "No response")
       }
     }
+  }
+  
+  static private func process<R>(networkResponse: NetworkResponse, config: NetworkRequestConfig) async throws -> R {
+    try self.checkForError(networkResponse: networkResponse, config: config)
     
     /// Deserialization
-    let deserialized: Any
+    let deserialized: any Sendable
     switch config.deserialization {
     case .disable:
       // TODO: Throw an error?
@@ -128,7 +147,7 @@ public final class NetworkTask {
     }
     
     /// Convertion
-    let converted: Any?
+    let converted: (any Sendable)?
     switch config.conversion {
     case .disable:
       converted = deserialized
@@ -148,7 +167,7 @@ public final class NetworkTask {
       guard let converted = converted else {
         throw NetworkTask.Error.badIntermediateState
       }
-      let mapped = try await task_mapping.process(converted)
+      let mapped = try await task_mapping.process(headers: networkResponse.response?.allHeaderFields as? Headers, response: converted)
       precondition(mapped is R)
       result = mapped as! R
     }

@@ -1,6 +1,6 @@
 //
 //  File.swift
-//  
+//
 //
 //  Created by Mikhail Nikanorov on 2/21/24.
 //
@@ -10,108 +10,91 @@ import Network
 import mew_wallet_ios_extensions
 import mew_wallet_ios_logger
 
-// Proper send
-// Proper close
 // Path changing?
-// Some real tests
-// SSL Pinning
-// Cleanup
-// Docs
 
-extension WebSocket {
-  enum Error: Swift.Error {
-    case badURL(URL)
-  }
+/// `WebSocket` is a public final class designed to handle WebSocket connections in a thread-safe manner, supporting both secure (wss) and insecure (ws) protocols.
+/// It provides functionality for connecting to a WebSocket server, sending and receiving messages, and handling ping/pong messages for connection keep-alive.
+/// TODO: Currently `WebSocket` doesn't handle `betterPathUpdateHandler`
+public final class WebSocket: Sendable {
+  /// State
   
-  enum InternalError: Swift.Error {
-    case disconnected
-  }
-  
-  enum ConnectionError: Swift.Error {
-    case notReachable
-  }
-  
-  enum State {
-    case disconnected
-    case pending
-    case connected
-  }
-  
-  public enum Event: Sendable, Equatable {
-    case connected
-    case disconnected
-    case viabilityDidChange(_ isViable: Bool)
-    case ping
-    case pong
-    case text(String?)
-    case binary(Data?)
-    case error(NWError)
-    case connectionError(ConnectionError)
-  }
-  
-  fileprivate struct Consumer: Sendable, Equatable {
-    let uuid: UUID
-    let continuation: AsyncStream<Event>.Continuation
-    static func == (lhs: WebSocket.Consumer, rhs: WebSocket.Consumer) -> Bool { lhs.uuid == rhs.uuid }
-    
-    init(continuation: AsyncStream<Event>.Continuation, termination: (@Sendable (UUID, AsyncStream<Event>.Continuation.Termination) -> Void)?) {
-      let uuid = UUID()
-      self.uuid = uuid
-      
-      self.continuation = continuation
-      
-      continuation.onTermination = { reason in
-        termination?(uuid, reason)
-      }
-    }
-  }
-}
-
-final class WebSocket: Sendable {
+  /// A thread-safe wrapper for the connection state.
   private let _state = ThreadSafe<State>(.disconnected)
-  var state: State { _state.value }
-  // Parameters
+  
+  /// Public read-only access to the current state of the WebSocket connection.
+  public var state: State { _state.value }
+  
+  /// Parameters
+  
+  /// Configuration settings for the WebSocket connection.
   private let configuration: WebSocket.Configuration
+  
+  /// The endpoint for the WebSocket connection, supporting both URL and host/port-based connections.
   private let endpoint: NWEndpoint
+  
+  /// Network parameters for the WebSocket connection, including protocol-specific options for TCP, TLS, and WebSocket protocols.
   private let parameters: NWParameters
   
-  // Connectivity
-  private let connectivity: ThreadSafe<Connectivity>
-  private let connectivityTask = ThreadSafe<Task<Void, Never>?>(nil)
+  /// Connectivity
   
+  /// A thread-safe wrapper for tracking the connectivity status of the WebSocket.
+  private let connectivity: ThreadSafe<Connectivity>
+  
+  /// A thread-safe wrapper for a task that manages the WebSocket connection process.
+  private let connectivityTask = ThreadSafe<Task<Void, Never>?>(nil)
+
+  /// Connection
+  
+  /// A thread-safe reference to the network connection used by the WebSocket.
   private let connection = ThreadSafe<NWConnection?>(nil)
+  
+  /// A thread-safe reference to the connection stream listener. Usually it's nil, non nil value means connection is on hold
+  private let connectionStream = ThreadSafe<AsyncStream<Event>.Continuation?>(nil)
+  
+  /// An optional `TLSPinner` instance for handling TLS certificate pinning, enhancing security for secure WebSocket connections.
+  private let pinner: WebSocket.TLSPinner?
+  
+  /// The dispatch queue used for connection-related operations, ensuring thread safety.
   private let connectionQueue: DispatchQueue = .init(label: "mew-wallet-ios-networking-websocket.connectionQeueu", qos: .utility)
   
+  /// A thread-safe reference to an `AsyncStream` continuation for broadcasting WebSocket events to listeners.
+  private let listener = ThreadSafe<AsyncStream<Event>.Continuation?>(nil)
+  /// A thread-safe reference to an async `Task` for broadcasting WebSocket events to listeners
+  private let listenerTask = ThreadSafe<Task<Void, Never>?>(nil)
+  
+  /// Ping pong
+  
+  /// A thread-safe timer for managing ping/pong message intervals to keep the WebSocket connection alive.
   private let pingPongTimer = ThreadSafe<Timer?>(nil)
   
-  private let consumers = ThreadSafe<[Consumer]>([])
+  /// Clients
   
+  /// A thread-safe list of consumers (listeners) for WebSocket events.
+  private let consumers = ThreadSafe<[WebSocket.Consumer]>([])
+  
+  /// Disconnect
+  
+  /// A thread-safe wrapper for a task that handles the disconnection process.
   private let disconnectTask = ThreadSafe<Task<Void, Never>?>(nil)
   
-  private let listener = ThreadSafe<AsyncStream<Event>.Continuation?>(nil)
+  /// A thread-safe wrapper for an `intentionalDisconnect` bool value
+  private let _intentionalDisconnect = ThreadSafe<Bool>(false)
   
-  /// A convenience initializer that sets up the `WebSocket` connection with optional headers and a delay.
+  /// A thread-safe wrapper for pending send requests
+  private let _pendingRequests = ThreadSafe<[UUID: CheckedContinuation<Void, any Error>]>([:])
+  
+  // MARK: - Lifecycle
+  
+  /// Initializes a `WebSocket` connection using a URL and optional headers.
   /// - Parameters:
-  ///   - url: The URL of the WebSocket connection to monitor.
-  ///   - headers: Extra headers for connection
-  ///   - configuration: `WebSocket.Configuration` with connection settings
-  convenience init(
+  ///   - url: The URL for the WebSocket connection.
+  ///   - headers: Additional headers to include in the WebSocket handshake.
+  ///   - configuration: Configuration settings for the WebSocket connection.
+  public convenience init(
     url: URL,
-    headers: [(name: String, value: String)] = [],
+    headers: [(name: String, value: String)],
     configuration: WebSocket.Configuration = .default
   ) throws {
-    
-    // Parameters
-    let webSocketParameters: NWParameters
-    let connectivityParameters: NWParameters
-    if url.scheme == "wss" || url.scheme == "https" {
-      webSocketParameters = NWParameters.tls
-      connectivityParameters = NWParameters.tls
-    } else {
-      webSocketParameters = NWParameters.tcp
-      connectivityParameters = NWParameters.tcp
-    }
-        
     // Options
     let webSocketOptions = NWProtocolWebSocket.Options()
     let connectivityOptions = NWProtocolWebSocket.Options()
@@ -121,124 +104,114 @@ final class WebSocket: Sendable {
     
     try self.init(
       url: url,
-      parameters: (webSocketParameters, connectivityParameters),
-      options: (webSocketOptions, connectivityOptions),
+      options: ([webSocketOptions], [connectivityOptions]),
       configuration: configuration
     )
-    
-    
-    
-    
-    
-    // Configure endpoint
-//    endpoint = .url(url)
-    
-    // Parameters
-    
-//    if url.scheme == "ws" {
-//      parameters = NWParameters.tcp
-//    } else {
-//      let tlsOptions = NWProtocolTLS.Options()
-//      sec_protocol_options_set_verify_block(tlsOptions.securityProtocolOptions, { (sec_protocol_metadata, sec_trust, sec_protocol_verify_complete) in
-////        let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
-//        sec_protocol_verify_complete(true)
-//      }, self.connectionQueue)
-//      
-//      let options = NWProtocolTCP.Options()
-//      options.connectionTimeout = Int(10)
-//      
-//      parameters = NWParameters(tls: tlsOptions, tcp: options)
-//    }
-    
-    // Options
-//    let options = NWProtocolWebSocket.Options()
-//    options.autoReplyPing = true
-//    if !headers.isEmpty {
-//      options.setAdditionalHeaders(headers)
-//      options.skipHandshake = true
-//    }
-//    options.setClientRequestHandler(DispatchQueue.main) { subprotocols, additionalHeaders in
-//      Logger.critical(.webSocket, "Request", metadata: [
-//        "headers": "\(headers)",
-//        "add": "\(additionalHeaders)"
-//      ])
-//      return .init(status: .accept, subprotocol: nil, additionalHeaders: headers)
-//    }
-//    parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
   }
   
-  /// A convenience initializer that sets up the `WebSocket` connection with the specified URL, parameters, and an optional delay.
+  /// Initializes a `WebSocket` connection using a URL, optional protocol options for WebSocket and connectivity, and configuration.
   /// - Parameters:
-  ///   - url: The URL of the WebSocket connection to monitor.
-  ///   - parameters: `NWParameters` used for the WebSocket connection, depending on whether the connection is secure (wss) or not (ws).
-  ///   - configuration: `WebSocket.Configuration` with connection settings
-  convenience init(
+  ///   - url: The URL for the WebSocket connection.
+  ///   - options: Optional protocol options for customizing the WebSocket and connectivity protocols.
+  ///   - configuration: Configuration settings for the WebSocket connection.
+  public convenience init(
     url: URL,
-    parameters: (webSocket: NWParameters, connectivity: NWParameters),
-    options: (webSocket: NWProtocolWebSocket.Options, connectivity: NWProtocolWebSocket.Options)? = nil,
+    options: (webSocket: [NWProtocolOptions], connectivity: [NWProtocolOptions])? = nil,
     configuration: WebSocket.Configuration = .default
   ) throws {
-    let allowedSchemes = ["ws", "wss", "http", "https"]
-    guard let scheme = url.scheme,
-            allowedSchemes.contains(scheme) else { throw Error.badURL(url) }
-    try self.init(endpoint: .url(url), parameters: parameters, options: options, configuration: configuration)
+    try self.init(endpoint: .url(url), options: options, configuration: configuration)
   }
   
-  /// The primary initializer that configures the `WebSocket` with the specified URL, parameters, and an optional delay.
+  /// Initializes a `WebSocket` connection with detailed configuration including endpoint, protocol options, and connection settings.
+  /// This is the primary initializer that sets up the internal state and prepares the connection.
   /// - Parameters:
-  ///   - endpoint: The `NWEndpoint` of the WebSocket connection to monitor.
-  ///   - parameters: `NWParameters` tuple used for the `WebSocket` and `Connectivity` connection, depending on whether the connection is secure (wss) or not (ws).
-  ///   - options: `NWProtocolWebSocket.Options` tuple used for `WebSocket` and `Connectivity` connection
-  ///   - configuration: `WebSocket.Configuration` with connection settings
-  init(
+  ///   - endpoint: The network endpoint (URL or host and port) to connect to.
+  ///   - options: Optional tuple containing arrays of `NWProtocolOptions` for WebSocket and connectivity configuration.
+  ///   - configuration: Configuration settings for the WebSocket connection, defining behavior like ping intervals, TLS settings, and more.
+  public init(
     endpoint: NWEndpoint,
-    parameters: (webSocket: NWParameters, connectivity: NWParameters),
-    options: (webSocket: NWProtocolWebSocket.Options, connectivity: NWProtocolWebSocket.Options)? = nil,
+    options: (webSocket: [NWProtocolOptions], connectivity: [NWProtocolOptions])? = nil,
     configuration: WebSocket.Configuration = .default
   ) throws {
-    let webSocketOptions = options?.webSocket ?? NWProtocolWebSocket.Options()
+    // Setup and initialization logic, including TLS pinner setup, is omitted for brevity.
     
-    webSocketOptions.autoReplyPing = configuration.autoReplyPing
-    parameters.webSocket.defaultProtocolStack.applicationProtocols.insert(webSocketOptions, at: 0)
-
+    // TLS Protocol
+    var protocolTLSOptions = (options?.webSocket.first(where: { $0 is NWProtocolTLS.Options }) as? NWProtocolTLS.Options)
+    switch configuration.tls {
+    case .disabled:
+      // We have nothing to do here, just use what we have
+      self.pinner = nil
+    case .unpinned:
+      // Make sure we have options
+      protocolTLSOptions = protocolTLSOptions ?? NWProtocolTLS.Options()
+      self.pinner = nil
+    case .pinned(let domain, let allowSelfSigned):
+      
+      // Make sure we have options and pinning is enabled
+      protocolTLSOptions = protocolTLSOptions ?? NWProtocolTLS.Options()
+      self.pinner = TLSPinner(domain: domain, allowSelfSigned: allowSelfSigned, endpoint: endpoint, options: protocolTLSOptions!, queue: self.connectionQueue)
+    }
+    
+    // TCP Protocol
+    let protocolTCPOptions = (options?.webSocket.first(where: { $0 is NWProtocolTCP.Options }) as? NWProtocolTCP.Options) ?? NWProtocolTCP.Options()
+    protocolTCPOptions.connectionTimeout = 5
+    protocolTCPOptions.persistTimeout = 5
+    
+    // WebSocket Protocol
+    let protocolWebSocketOptions = (options?.webSocket.first(where: { $0 is NWProtocolWebSocket.Options }) as? NWProtocolWebSocket.Options) ?? NWProtocolWebSocket.Options()
+    protocolWebSocketOptions.autoReplyPing = configuration.autoReplyPing
+    
+    // Prepare NWParameters
+    let parametersWebSocket = NWParameters(tls: protocolTLSOptions, tcp: protocolTCPOptions)
+    
+    // Add WebSocket to NWParameters
+    parametersWebSocket.defaultProtocolStack.applicationProtocols.insert(protocolWebSocketOptions, at: 0)
+    
+    // Create Connectivity
+    self.connectivity = try ThreadSafe(Connectivity(endpoint: endpoint, options: options?.connectivity ?? [], configuration: configuration))
+    
+    // Set parameters
+    self.endpoint = endpoint
+    self.parameters = parametersWebSocket
     self.configuration = configuration
     
-    self.connectivity = ThreadSafe(Connectivity(endpoint: endpoint, parameters: parameters.connectivity, options: options?.connectivity, configuration: configuration))
-        
-    self.endpoint = endpoint
-    self.parameters = parameters.webSocket
     Logger.trace(.webSocket, "Initialized", metadata: [
-      "endpoint": "\(endpoint)",
-      "parameters": "\(parameters)",
-      "configuration": "\(configuration)"
+      "endpoint": "\(self.endpoint)",
+      "parameters": "\(self.parameters)",
+      "configuration": "\(self.configuration)"
     ])
   }
   
   deinit {
+    // Cleanup code to ensure resources are properly released when the WebSocket instance is deallocated.
     self._discardConsumers()
     Logger.trace(.webSocket, "Deinit", metadata: [
-      "endpoint": "\(endpoint)"
+      "endpoint": "\(self.endpoint)"
     ])
   }
   
+  // MARK: - Connect
+  
+  /// Initiates the connection to the WebSocket server and returns an `AsyncStream` of events.
+  /// This function manages the connection lifecycle, including reconnection handling and event broadcasting.
+  /// - Returns: An `AsyncStream<Event>` that emits WebSocket events such as connected, disconnected, received messages, etc.
   public func connect() -> AsyncStream<Event> {
+    // Connection initiation and event stream setup logic is omitted for brevity.
     self._change(state: .pending, from: .disconnected)
     
     Logger.trace(.webSocket, "New consumer", metadata: [
-      "endpoint": "\(endpoint)"
+      "endpoint": "\(self.endpoint)"
     ])
     return AsyncStream {[weak self] (continuation: AsyncStream<Event>.Continuation) in
       guard let self else {
-        Logger.trace(.webSocket, "Consumer discarded", metadata: [
-          "endpoint": "\(endpoint)"
-        ])
+        Logger.trace(.webSocket, "Consumer discarded on connect")
         continuation.finish()
         return
       }
       
       let consumer = self._add(consumer: continuation)
       Logger.trace(.webSocket, "New consumer added", metadata: [
-        "endpoint": "\(endpoint)",
+        "endpoint": "\(self.endpoint)",
         "consumer": "\(consumer.uuid)"
       ])
       
@@ -246,60 +219,154 @@ final class WebSocket: Sendable {
     }
   }
   
-  public func disconnect(_ closeCode: NWProtocolWebSocket.CloseCode = .protocolCode(.normalClosure)) {
-    self._process(closeCode: closeCode)
-  }
+  // MARK: - Send
   
+  /// Sends a text message to the WebSocket server asynchronously. Waits for successful sending or throws an error
+  /// - Parameter message: The text message to send
   public func send(_ message: String) async throws {
     let data = message.data(using: .utf8)
-    let meta = NWProtocolWebSocket.Metadata(opcode: .text)
-    let context = NWConnection.ContentContext(identifier: "text", metadata: [meta])
-    send(data: data, context: context)
+    try await send(data: data, opcode: .text)
   }
   
+  /// Sends a text message to the WebSocket server asynchronously.
+  /// - Parameter message: The text message to send
+  public func send(_ message: String) {
+    let data = message.data(using: .utf8)
+    send(data: data, opcode: .text)
+  }
+  
+  /// Sends a binary message to the WebSocket server asynchronously. Waits for successful sending or throws an error
+  /// - Parameter data: The binary data to send.
   public func send(_ data: Data) async throws {
-    let meta = NWProtocolWebSocket.Metadata(opcode: .binary)
-    let context = NWConnection.ContentContext(identifier: "binary", metadata: [meta])
-    send(data: data, context: context)
+    try await send(data: data, opcode: .binary)
   }
   
+  /// Sends a binary message to the WebSocket server asynchronously.
+  /// - Parameter data: The binary data to send.
+  public func send(_ data: Data) {
+    send(data: data, opcode: .binary)
+  }
+  
+  /// Sends a ping message to the WebSocket server to keep the connection alive.
   public func ping() {
     let meta = NWProtocolWebSocket.Metadata(opcode: .ping)
     meta.setPongHandler(self.connectionQueue) {[weak self] error in
       guard error == nil else { return }
       self?._broadcast(.pong)
     }
-    let context = NWConnection.ContentContext(identifier: "ping", metadata: [meta])
-    // We have to send some data, otherwise
-    send(data: nil, context: context)
+    send(data: nil, opcode: .ping, meta: meta)
   }
   
+  /// Responds to a ping message from the server with a pong message.
+  /// This method automatically handles ping messages according to the WebSocket protocol.
   public func pong() {
-    let meta = NWProtocolWebSocket.Metadata(opcode: .pong)
-    let context = NWConnection.ContentContext(identifier: "pong", metadata: [meta])
-    send(data: nil, context: context)
+    send(data: nil, opcode: .pong)
   }
   
-  private func send(data: Data?, context: NWConnection.ContentContext) {
-    self.connection.value?.send(content: data,
-                                contentContext: context,
-                                isComplete: true,
-                                completion: .contentProcessed({/*[weak self]*/ error in
-      // check for error? what could be there?
-//      debugPrint(">>> sent")
-    }))
+  // MARK: - Disconnect
+  
+  /// Disconnects the WebSocket connection with an optional close code.
+  /// Properly closes the connection according to the WebSocket protocol.
+  /// - Parameter closeCode: The WebSocket close code indicating the reason for disconnection.
+  public func disconnect(_ closeCode: NWProtocolWebSocket.CloseCode = .protocolCode(.normalClosure)) {
+    self._intentionalDisconnect.value = true
+    // Proper close
+    self._process(closeCode: closeCode)
   }
   
   // MARK: - Private
   
+  // MARK: - Send
+  
+  /// A helper method to asynchronously send data over the WebSocket connection.
+  /// - Parameters:
+  ///   - data: The data to send. This could be nil if sending control frames like ping/pong.
+  ///   - opcode: The opcode indicating the type of data being sent (text, binary, ping, pong, etc.).
+  ///   - meta: Optional metadata associated with the data being sent.
+  @inline(__always)
+  private func send(data: Data?, opcode: NWProtocolWebSocket.Opcode, meta: NWProtocolWebSocket.Metadata? = nil) async throws {
+    let meta = meta ?? NWProtocolWebSocket.Metadata(opcode: opcode)
+    let context = NWConnection.ContentContext(identifier: "\(meta.opcode)", metadata: [meta])
+    try await send(data: data, context: context)
+  }
+  
+  /// A helper method to asynchronously send data over the WebSocket connection.
+  /// - Parameters:
+  ///   - data: The data to send. This could be nil if sending control frames like ping/pong.
+  ///   - opcode: The opcode indicating the type of data being sent (text, binary, ping, pong, etc.).
+  ///   - meta: Optional metadata associated with the data being sent.
+  @inline(__always)
+  private func send(data: Data?, opcode: NWProtocolWebSocket.Opcode, meta: NWProtocolWebSocket.Metadata? = nil) {
+    let meta = meta ?? NWProtocolWebSocket.Metadata(opcode: opcode)
+    let context = NWConnection.ContentContext(identifier: "\(meta.opcode)", metadata: [meta])
+    send(data: data, context: context)
+  }
+  
+  /// Handles the low-level details of sending data over the network.
+  /// This method ensures that messages are only sent when the connection is in the connected state.
+  /// - Parameters:
+  ///   - data: The data to send.
+  ///   - context: The content context for the data being sent, including metadata like the opcode.
+  @inline(__always)
+  private func send(data: Data?, context: NWConnection.ContentContext) async throws {
+    guard self._state.value == .connected else {
+      throw ConnectionError.notReachable
+    }
+    try await withCheckedThrowingContinuation {[weak self] continuation in
+      guard let self, let connection = self.connection.value else {
+        continuation.resume()
+        return
+      }
+      let id = UUID()
+      self._pendingRequests.write { pendings in
+        pendings[id] = continuation
+      }
+      connection.send(content: data,
+                      contentContext: context,
+                      isComplete: true,
+                      completion: .contentProcessed({ error in
+        self._pendingRequests.write { pendings in
+          pendings.removeValue(forKey: id)
+        }
+        if let error {
+          continuation.resume(throwing: error)
+        } else {
+          continuation.resume()
+        }
+      }))
+    }
+  }
+  
+  /// Handles the low-level details of sending data over the network.
+  /// This method ensures that messages are only sent when the connection is in the connected state.
+  /// - Parameters:
+  ///   - data: The data to send.
+  ///   - context: The content context for the data being sent, including metadata like the opcode.
+  @inline(__always)
+  private func send(data: Data?, context: NWConnection.ContentContext) {
+    self.connection.value?.send(
+      content: data,
+      contentContext: context,
+      isComplete: true,
+      completion: .contentProcessed({ _ in }))
+  }
+  
+  // MARK: - Consumers
+  
+  /// Adds a new consumer for WebSocket events.
+  /// This method registers a continuation from an `AsyncStream` to the list of active consumers.
+  /// - Parameter continuation: The `AsyncStream<Event>.Continuation` that will receive WebSocket events.
+  /// - Returns: A `Consumer` object representing the newly added consumer.
   private func _add(consumer continuation: AsyncStream<Event>.Continuation) -> Consumer {
-    let consumer = Consumer(continuation: continuation) {[weak self] uuid, reason in
+    let consumer = Consumer(continuation: continuation) {[weak self] consumer, reason in
       guard let self else { return }
       Logger.trace(.webSocket, "Consumer disconnected", metadata: [
         "endpoint": "\(self.endpoint)",
-        "uuid": "\(uuid)"
+        "uuid": "\(consumer.uuid)",
+        "reason": "\(reason)"
       ])
       
+      self._remove(consumer: consumer)
       self._disconnectIfNeeded()
     }
     self.consumers.write { consumers in
@@ -308,15 +375,46 @@ final class WebSocket: Sendable {
     return consumer
   }
   
+  /// Removes a consumer from the list of active consumers.
+  /// This method is typically called when a consumer no longer wishes to receive WebSocket events or when its associated stream is finished.
+  /// - Parameter consumer: The `Consumer` object to be removed.
   private func _remove(consumer: Consumer) {
     self.consumers.write { consumers in
       consumers.removeAll(where: { $0 == consumer })
     }
   }
   
+  /// Discards all active consumers of the WebSocket events.
+  /// This method is typically called as part of the disconnection process to ensure that all event streams are properly terminated.
+  private func _discardConsumers() {
+    let outdated = self.consumers.write { consumers in
+      let outdated = consumers
+      consumers.removeAll(keepingCapacity: true)
+      return outdated
+    }
+    guard !outdated.isEmpty else { return }
+    outdated.forEach { consumer in
+      consumer.continuation.finish()
+    }
+#if DEBUG
+    Logger.trace(.webSocket, "Consumers discarded", metadata: [
+      "endpoint": "\(self.endpoint)",
+      "active": "\(self.consumers.value.count)"
+    ])
+#else
+    Logger.trace(.webSocket, "Consumers discarded", metadata: [
+      "endpoint": "\(self.endpoint)"
+    ])
+#endif
+  }
+  
+  // MARK: - Connection
+  
+  /// Attempts to establish a WebSocket connection if not already connected or currently trying to connect.
+  /// This method checks the current state and initiates a connection sequence if appropriate.
   private func _connectIfNeeded() {
-    let result = self.connection.write { connection in
-      guard connection == nil else { return false }
+    let result = self.connection.write {[weak self] connection in
+      guard let self, connection == nil else { return false }
       connection = NWConnection(to: self.endpoint, using: self.parameters)
       return true
     }
@@ -354,12 +452,19 @@ final class WebSocket: Sendable {
               
               switch event {
               case .connected:
-                Task {[weak self] in
-                  guard let self else { return }
-                  debugPrint("waiting for stream")
-                  for await event in self._listenStream() {
-                    let success = self._broadcast(event)
-                    guard success else { return }
+                listenerTask.write {[weak self] task in
+                  guard task == nil else { return }
+                  task = Task {[weak self] in
+                    guard let self else { return }
+                    Logger.trace(.webSocket, "Waiting for stream")
+                    for await event in self._listenStream() {
+                      let success = self._broadcast(event)
+                      guard success else {
+                        return
+                      }
+                    }
+                    self.listenerTask.value = nil
+                    Logger.trace(.webSocket, "Stream finished")
                   }
                 }
               case .disconnected:
@@ -401,21 +506,34 @@ final class WebSocket: Sendable {
     }
   }
   
-  @discardableResult
-  private func _disconnectIfNeeded() -> Bool {
-    guard self.consumers.value.isEmpty else { return false }
-    Logger.trace(.webSocket, "Termination", metadata: [
-      "endpoint": "\(endpoint)",
-      "reason": "no consumers"
-    ])
-    self.listener.write { listener in
-      listener?.finish()
-      listener = nil
+  private func _restartConnection() {
+    self.connection.write {[weak self] connection in
+      guard let self else { return }
+      guard let outdated = connection else { return }
+      
+      connection = NWConnection(to: self.endpoint, using: self.parameters)
+      connection?.stateUpdateHandler = outdated.stateUpdateHandler
+      connection?.betterPathUpdateHandler = outdated.betterPathUpdateHandler
+      connection?.pathUpdateHandler = outdated.pathUpdateHandler
+      connection?.viabilityUpdateHandler = outdated.viabilityUpdateHandler
+      
+      outdated.stateUpdateHandler = nil
+      outdated.betterPathUpdateHandler = nil
+      outdated.pathUpdateHandler = nil
+      outdated.viabilityUpdateHandler = nil
+      outdated.forceCancel()
+      
+      connection?.start(queue: self.connectionQueue)
     }
-    return true
   }
   
+  // MARK: - Listening
+  
+  /// Creates and returns an `AsyncStream<Event>` for receiving WebSocket events.
+  /// This method sets up a stream that will listen for messages and other events from the WebSocket connection and deliver them to consumers.
+  /// - Returns: An `AsyncStream<Event>` that emits WebSocket events.
   private func _listenStream() -> AsyncStream<Event> {
+    Logger.trace(.webSocket, "Start listener")
     return AsyncStream {[weak self] continuation in
       guard let self else {
         continuation.finish()
@@ -425,296 +543,63 @@ final class WebSocket: Sendable {
       self._listen(continuation)
     }
   }
-    
+  
+  /// Listens for WebSocket messages and delivers them to the active continuation.
+  /// This recursive method listens for incoming data from the WebSocket connection and, upon receiving a message, decodes it and forwards it to the continuation.
+  /// - Parameter continuation: The `AsyncStream<Event>.Continuation` that will receive decoded messages and events.
   private func _listen(_ continuation: AsyncStream<Event>.Continuation) {
     /// Start listening for messages over the WebSocket.
+    guard !self._intentionalDisconnect.value else {
+      return
+    }
     let connection = self.connection.value
     connection?.receiveMessage {[weak self] content, contentContext, isComplete, error in
       guard let self else { return }
+      guard !self._intentionalDisconnect.value else { return }
       
       if let contentContext,
-         let event = self._process(content, context: contentContext) {
+         let event = self._process(content: content, context: contentContext) {
         let result = continuation.yield(event)
-        if case .terminated = result {
-          return
-        }
+        if case .terminated = result { return }
       }
       
       do {
         if let error,
            let event = try self._process(error: error) {
           let result = continuation.yield(event)
-          if case .terminated = result {
-            return
-          }
+          if case .terminated = result { return }
         }
         
         self._listen(continuation)
       } catch InternalError.disconnected {
-        // Do nothing
+        // Do nothing, breaking connection
+      } catch InternalError.onHold {
       } catch {
         // Unknown errors
+        Logger.trace(.webSocket, "Unknown error in listener", metadata: [
+          "error": "\(error)"
+        ])
         self._listen(continuation)
       }
-      
-//      debugPrint("Listen: \(content) ||| \(contentContext) ||| \(isComplete) ||| \(error)")
-//      debugPrint("Listen - content: \(String(data: content ?? Data(), encoding: .utf8))")
-//      
-//      if let metadata = contentContext?.protocolMetadata.first as? NWProtocolWebSocket.Metadata {
-//        debugPrint("Opcode: \(metadata.opcode)")
-//      }
-//
-      
-    }
-//    connection?.receiveMessage { [weak self] (data, context, _, error) in
-//      guard let self = self else {
-//        return
-//      }
-//      
-//      if let data = data, !data.isEmpty, let context = context {
-//        self.receiveMessage(data: data, context: context)
-//      }
-//      
-//      if let error = error {
-//        self.reportErrorOrDisconnection(error)
-//      } else {
-//        self.listen()
-//      }
-//    }
-  }
-  
-  private func _process(_ content: Data?, context: NWConnection.ContentContext) -> Event? {
-    guard let metadata = context.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata else { return nil }
-    Logger.critical(.webSocket, "\(#function)", metadata: [
-      "context": "\(context)",
-      "metadata": "\(metadata)",
-      "opcode": "\(metadata.opcode)"
-    ])
-    
-    switch metadata.opcode {
-    case .binary:
-      Logger.trace(.webSocket, "Incoming binary", metadata: [
-        "endpoint": "\(endpoint)",
-        "size": "\(content?.count ?? .zero)"
-      ])
-      return .binary(content ?? Data())
-    
-    case .cont:
-      return nil
-    
-    case .text:
-      let string: String?
-      if let content {
-        string = String(data: content, encoding: .utf8) ?? ""
-      } else {
-        string = nil
-      }
-      Logger.trace(.webSocket, "Incoming text", metadata: [
-        "endpoint": "\(endpoint)",
-        "content": "\(string)"
-      ])
-      return .text(string)
-    
-    case .ping:
-      return .ping
-    
-    case .pong:
-      return .pong
-    
-    case .close:
-      self._process(closeCode: metadata.closeCode)
-      return nil
-    
-    @unknown default:
-      return nil
-    }
-    
-//    guard let metadata = context.protocolMetadata.first as? NWProtocolWebSocket.Metadata else {
-//        return
-//    }
-//
-//    switch metadata.opcode {
-//    case .binary:
-//        self.delegate?.webSocketDidReceiveMessage(connection: self,
-//                                                  data: data)
-//    case .cont:
-//        //
-//        break
-//    case .text:
-//        guard let string = String(data: data, encoding: .utf8) else {
-//            return
-//        }
-//        self.delegate?.webSocketDidReceiveMessage(connection: self,
-//                                                  string: string)
-//    case .close:
-//        scheduleDisconnectionReporting(closeCode: metadata.closeCode,
-//                                       reason: data)
-//    case .ping:
-//        // SEE `autoReplyPing = true` in `init()`.
-//        break
-//    case .pong:
-//        // SEE `ping()` FOR PONG RECEIVE LOGIC.
-//        break
-//    @unknown default:
-//        fatalError()
-//    }
-  }
-  
-  private func _process(error: NWError) throws -> Event? {
-    if case let .posix(code) = error {
-      switch code {
-      case .ENOTCONN where (self.connection.value?.intentionalDisconnection ?? false):
-        return nil
-      case .ECANCELED where (self.connection.value?.intentionalDisconnection ?? false):
-        return nil
-      case .ECONNREFUSED:
-        Logger.notice(.webSocket, "No connection", metadata: [
-          "endpoint": "\(endpoint)",
-          "action": "Waiting for connectivity"
-        ])
-        self.waitForConnectivityAndRestart()
-        return .connectionError(.notReachable)
-      case .ECONNRESET:
-        let result = self._change(state: .pending, from: .connected)
-        guard result.changed else { return nil }
-        return .disconnected
-//        // hmm...
-//        let result = self._state.write { state in
-//          guard state == .connected else { return false }
-//          state = .pending
-//          Logger.trace(.webSocket, "Internal state changed", metadata: [
-//            "endpoint": "\(endpoint)",
-//            "state": "\(state)"
-//          ])
-//          return true
-//        }
-//        guard result else { return nil }
-        return .disconnected
-      case .ETIMEDOUT:
-        self._process(closeCode: .protocolCode(.goingAway))
-        throw InternalError.disconnected
-      case .ENOTCONN:
-        self._process(closeCode: .protocolCode(.goingAway))
-        throw InternalError.disconnected
-      case .ECANCELED:
-        self._process(closeCode: .protocolCode(.goingAway))
-        throw InternalError.disconnected
-      case .ENETDOWN:
-        self._process(closeCode: .protocolCode(.goingAway))
-        throw InternalError.disconnected
-      case .ECONNABORTED:
-        self._process(closeCode: .protocolCode(.goingAway))
-        throw InternalError.disconnected
-        
-      default:
-        return .error(error)
-      }
-    }
-    return .error(error)
-  }
-  
-  private func _process(closeCode: NWProtocolWebSocket.CloseCode) {
-    Logger.trace(.webSocket, "Process close", metadata: [
-      "endpoint": "\(endpoint)",
-      "code": "\(closeCode)"
-    ])
-    // schedule close
-    // stop processing after that...
-    
-    // Cancel any existing `disconnectionWorkItem` that was set first
-    self.disconnectTask.write {[weak self] task in
-      task?.cancel()
-      task = Task {[weak self] in
-        guard let self else { return }
-        do {
-          try Task.checkCancellation()
-          self._disconnect()
-        } catch {}
-      }
-    }
-//    self.disconnectWork = DispatchWorkItem {[weak self] in
-//      guard let self else { return }
-//      
-//      // send ?
-//    }
-//    
-//    
-//    sle.fdisconnectionWorkItem?.cancel()
-//
-//    disconnectionWorkItem = DispatchWorkItem { [weak self] in
-//        guard let self = self else { return }
-//        self.delegate?.webSocketDidDisconnect(connection: self,
-//                                              closeCode: closeCode,
-//                                              reason: reason)
-//    }
-//    
-//    connection?.cancel()
-//    connection = nil
-    // and the rest
-    
-//    if closeCode == .protocolCode(.normalClosure) {
-//        connection?.cancel()
-//        scheduleDisconnectionReporting(closeCode: closeCode,
-//                                       reason: nil)
-//    } else {
-//        let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
-//        metadata.closeCode = closeCode
-//        let context = NWConnection.ContentContext(identifier: "closeContext",
-//                                                  metadata: [metadata])
-//
-//        if connection?.state == .ready {
-//            // See implementation of `send(data:context:)` for `scheduleDisconnection(closeCode:, reason:)`
-//            send(data: nil, context: context)
-//        } else {
-//            scheduleDisconnectionReporting(closeCode: closeCode, reason: nil)
-//        }
-//    }
-  }
-  
-  private func _disconnect() {
-    Logger.trace(.webSocket, "Internal disconnect triggered", metadata: [
-      "endpoint": "\(endpoint)"
-    ])
-    // send disconnect code
-    self.connection.write { connection in
-      connection?.cancel()
-      connection = nil
     }
   }
   
-  private func _discardConsumers() {
-    let outdated = self.consumers.write { consumers in
-      let outdated = consumers
-      consumers.removeAll(keepingCapacity: true)
-      return outdated
-    }
-    guard !outdated.isEmpty else { return }
-    outdated.forEach { consumer in
-      consumer.continuation.finish()
-    }
-    
-#if DEBUG
-    Logger.trace(.webSocket, "Consumers discarded", metadata: [
-      "endpoint": "\(endpoint)",
-      "active": "\(self.consumers.value.count)"
-    ])
-#else
-    Logger.trace(.webSocket, "Consumers discarded", metadata: [
-      "endpoint": "\(endpoint)"
-    ])
-#endif
-  }
+  // MARK: - Broadcasting
   
-  // false - means needs disconnect
+  /// Broadcasts events to all registered consumers of the WebSocket.
+  /// This method ensures that all listeners are notified of events such as messages, connection state changes, etc.
+  /// - Parameter event: The event to broadcast.
+  /// - Returns: A Boolean indicating whether the broadcast was successful and if there are active listeners. `false` == WebSocket will be disconnection
   @discardableResult
   private func _broadcast(_ event: Event) -> Bool {
     let consumers = self.consumers.value
     guard !consumers.isEmpty else {
       let disconnect = !self._disconnectIfNeeded()
       Logger.trace(.webSocket, "Broadcast failed", metadata: [
-        "endpoint": "\(endpoint)",
+        "event": "\(event)",
+        "endpoint": "\(self.endpoint)",
         "reason": "no consumers",
-        "disconnect": "\(disconnect)"
+        "disconnect": "\(!disconnect)"
       ])
       return disconnect
     }
@@ -729,7 +614,7 @@ final class WebSocket: Sendable {
     // If we have outdated - cleanup
     guard !outdated.isEmpty else {
       Logger.trace(.webSocket, "Broadcast sent", metadata: [
-        "endpoint": "\(endpoint)",
+        "endpoint": "\(self.endpoint)",
         "extra": "No outdated",
         "event": "\(event)"
       ])
@@ -740,102 +625,184 @@ final class WebSocket: Sendable {
     }
     let disconnect = !self._disconnectIfNeeded()
     Logger.trace(.webSocket, "Broadcast failed", metadata: [
-      "endpoint": "\(endpoint)",
+      "event": "\(event)",
+      "endpoint": "\(self.endpoint)",
       "reason": "no consumers",
-      "disconnect": "\(disconnect)"
+      "disconnect": "\(!disconnect)"
     ])
     return disconnect
   }
   
-  private func _process(state: NWConnection.State) -> Event? {
-      switch state {
-      case .ready:
-        self._change(state: .connected, from: nil)
-        self._startPingPongTimer()
-        return .connected
-//          isMigratingConnection = false
-//          delegate?.webSocketDidConnect(connection: self)
-      case .waiting(let error):
-        self._change(state: .pending, from: nil)
-//        self._state.write { state in
-//          state = .pending
-//          Logger.trace(.webSocket, "Internal state changed", metadata: [
-//            "endpoint": "\(endpoint)",
-//            "state": "\(state)"
-//          ])
-//        }
-        self._stopPingPongTimer()
-        self.waitForConnectivityAndRestart()
-//        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-//          self.connection!.restart()
-//        }
-        return try? self._process(error: error)
-//          isMigratingConnection = false
-//          reportErrorOrDisconnection(error)
-//
-//          /// Workaround to prevent loop while reconnecting
-//          errorWhileWaitingCount += 1
-//          if errorWhileWaitingCount >= errorWhileWaitingLimit {
-//              tearDownConnection(error: error)
-//              errorWhileWaitingCount = 0
-//          }
-      case .failed(let error):
-        return try? self._process(error: error)
-//          errorWhileWaitingCount = 0
-//          isMigratingConnection = false
-//          tearDownConnection(error: error)
-      case .setup:
-        return nil
-      case .preparing:
-        return nil
-      case .cancelled:
-        let result = self._change(state: .disconnected, from: nil)
-        guard result.changed, result.oldState == .connected else { return nil }
-        
-//        let result = self._state.write { state in
-//          let oldState = state
-//          guard state != .disconnected else { return false }
-//          state = .disconnected
-//          Logger.trace(.webSocket, "Internal state changed", metadata: [
-//            "endpoint": "\(endpoint)",
-//            "state": "\(state)"
-//          ])
-//          return oldState == .connected
-//        }
-//        guard result else { return nil }
-        return .disconnected
-//          errorWhileWaitingCount = 0
-//          tearDownConnection(error: nil)
-      @unknown default:
-        return nil
-      }
-  }
+  // MARK: - Processing
   
-  private func send() {
+  /// Processes and handles incoming messages, converting raw data into consumable events for the client.
+  /// - Parameters:
+  ///   - content: The raw data received from the server.
+  ///   - context: The context of the received message, including metadata and opcode.
+  private func _process(content: Data?, context: NWConnection.ContentContext) -> Event? {
+    guard let metadata = context.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata else { return nil }
+    Logger.trace(.webSocket, "\(#function)", metadata: [
+      "context": "\(context)",
+      "metadata": "\(metadata)",
+      "opcode": "\(metadata.opcode)"
+    ])
     
-  }
-  
-  private func waitForConnectivityAndRestart() {
-    self.connectivityTask.write {[weak self] task in
-      guard task == nil else { return }
-      task = Task {[weak self] in
-        guard let self else { return }
-        defer {
-          self.connectivityTask.value = nil
-        }
-        do {
-          try await self.connectivity.value.waitForConnectivity()
-          self.connection.value?.restart()
-        } catch {
-          debugPrint("CANCELLED!")
-        }
+    switch metadata.opcode {
+    case .binary:
+      Logger.trace(.webSocket, "Incoming binary", metadata: [
+        "endpoint": "\(self.endpoint)",
+        "size": "\(content?.count ?? .zero)"
+      ])
+      return .binary(content ?? Data())
+      
+    case .cont:
+      return nil
+      
+    case .text:
+      let string: String?
+      if let content {
+        string = String(data: content, encoding: .utf8) ?? ""
+      } else {
+        string = nil
       }
+      Logger.trace(.webSocket, "Incoming text", metadata: [
+        "endpoint": "\(self.endpoint)",
+        "content": "\(String(describing: string))"
+      ])
+      return .text(string)
+      
+    case .ping:
+      return .ping
+      
+    case .pong:
+      return .pong
+      
+    case .close:
+      self._process(closeCode: metadata.closeCode)
+      return nil
+      
+    @unknown default:
+      return nil
     }
   }
   
+  /// Processes errors encountered during the WebSocket connection lifecycle.
+  /// - Parameter error: The error that occurred.
+  /// - Returns: An optional `Event` representing the error, for broadcasting to consumers.
+  private func _process(error: NWError) throws -> Event? {
+    switch error {
+    case .posix(let code):
+      switch code {
+        //      case .ENOTCONN where intentional disconnection // Better path case?
+        //        return nil
+        //      case .ECANCELED where intentional disconnection // Better path case?
+        //        return nil
+      case .ECONNREFUSED, .ETIMEDOUT, .ENOTCONN, .ENETDOWN:
+        Logger.notice(.webSocket, "No connection", metadata: [
+          "endpoint": "\(self.endpoint)",
+          "action": "Waiting for connectivity",
+          "error": "\(error)"
+        ])
+        self._change(state: .pending, from: .connected)
+        self._waitForConnectivityAndRestart()
+        throw InternalError.onHold
+      
+      case .ECONNRESET:
+        Logger.notice(.webSocket, "No connection", metadata: [
+          "endpoint": "\(self.endpoint)",
+          "error": "\(error)"
+        ])
+        let result = self._change(state: .pending, from: .connected)
+        guard result.changed else { return nil }
+        return .disconnected
+        
+      case .ECANCELED, .ECONNABORTED:
+        Logger.notice(.webSocket, "No connection", metadata: [
+          "endpoint": "\(self.endpoint)",
+          "error": "\(error)"
+        ])
+        if self._intentionalDisconnect.value {
+          self._process(closeCode: .protocolCode(.goingAway))
+        }
+        throw InternalError.disconnected
+     
+      default:
+        return .error(error)
+      }
+      
+    case .tls:
+      Logger.critical(.webSocket, "TSL Error", metadata: [
+        "error": "\(error)"
+      ])
+      self._change(state: .pending, from: nil)
+      return .error(error)
+    default:
+      return .error(error)
+    }
+  }
+  
+  /// Handles changes in the connection state, updating the internal state and performing actions as necessary.
+  /// - Parameter state: The new state of the connection.
+  /// - Returns: An optional `Event` representing the state change, for broadcasting to consumers.
+  private func _process(state: NWConnection.State) -> Event? {
+    switch state {
+    case .ready:
+      self._change(state: .connected, from: nil)
+      self._startPingPongTimer()
+      return .connected
+      
+    case .waiting(let error):
+      self._pendingRequests.write { pendings in
+        pendings.forEach { $0.value.resume(throwing: WebSocket.ConnectionError.notReachable) }
+        pendings.removeAll()
+      }
+      self._change(state: .pending, from: nil)
+      self._stopPingPongTimer()
+      self._waitForConnectivityAndRestart()
+      return try? self._process(error: error)
+      
+    case .failed(let error):
+      self._stopPingPongTimer()
+      self._pendingRequests.write { pendings in
+        pendings.forEach { $0.value.resume(throwing: WebSocket.ConnectionError.notReachable) }
+        pendings.removeAll()
+      }
+      return try? self._process(error: error)
+      
+    case .setup:
+      self._stopPingPongTimer()
+      return nil
+      
+    case .preparing:
+      self._stopPingPongTimer()
+      return nil
+      
+    case .cancelled:
+      self._stopPingPongTimer()
+      self._pendingRequests.write { pendings in
+        pendings.forEach { $0.value.resume(throwing: WebSocket.ConnectionError.notReachable) }
+        pendings.removeAll()
+      }
+      let result = self._change(state: .disconnected, from: nil)
+      guard result.changed, result.oldState == .connected else { return nil }
+      return .disconnected
+      
+    @unknown default:
+      return nil
+    }
+  }
+  
+  // MARK: - State handling
+  
+  /// Changes the internal state of the WebSocket connection.
+  /// This method atomically updates the connection's state and logs the change.
+  /// - Parameters:
+  ///   - to: The new state to transition to.
+  ///   - from: The current state from which to transition. If `nil`, the transition is not conditional on the current state.
+  /// - Returns: A tuple containing a Boolean indicating whether the state changed and the old state before the change.
   @discardableResult
   private func _change(state to: State, from: State?) -> (changed: Bool, oldState: State) {
-    let result = self._state.write { state in
+    let result = self._state.write {[weak self] state in
       if let from {
         // Changing states..
         guard from == state else { return (changed: false, oldState: state) }
@@ -844,7 +811,7 @@ final class WebSocket: Sendable {
       guard state != to else { return (changed: false, oldState: state) }
       state = to
       Logger.trace(.webSocket, "Internal state changed", metadata: [
-        "endpoint": "\(self.endpoint)",
+        "endpoint": "\(String(describing: self?.endpoint))",
         "state": "\(state)"
       ])
       return (changed: true, oldState: oldState)
@@ -859,6 +826,127 @@ final class WebSocket: Sendable {
     return result
   }
   
+  // MARK: - Connectivity
+  
+  /// Waits for connectivity to be established and then restarts the WebSocket connection.
+  /// This method is called when the WebSocket connection encounters connectivity issues and needs to attempt a reconnection.
+  private func _waitForConnectivityAndRestart() {
+    self.connectivityTask.write {[weak self] task in
+      guard task == nil else { return }
+      task = Task {[weak self] in
+        defer {
+          self?.connectivityTask.write { task in
+            task?.cancel()
+            task = nil
+          }
+        }
+        do {
+          try await self?.connectivity.value.waitForConnectivity()
+          Logger.notice(.webSocket, "Connectivity reached")
+          // Wait a little bit extra
+          try await Task.sleep(nanoseconds: 500_000_000)
+          
+          self?._restartConnection()
+          
+          if let stream = self?.listener.value {
+            // Restart holded stream continuation
+            self?._listen(stream)
+          }
+        } catch {
+          Logger.notice(.webSocket, "Connectivity task cancelled")
+        }
+      }
+    }
+  }
+  
+  // MARK: - Disconnect
+  
+  /// Disconnects the WebSocket connection if there are no active consumers.
+  /// This method ensures the connection is not unnecessarily kept alive when there are no interested parties.
+  /// - Returns: A Boolean indicating whether the disconnection was initiated.
+  @discardableResult
+  private func _disconnectIfNeeded() -> Bool {
+    guard self.consumers.value.isEmpty else { return false }
+    Logger.trace(.webSocket, "Termination", metadata: [
+      "endpoint": "\(self.endpoint)",
+      "reason": "no consumers"
+    ])
+    let changed: Bool = self._intentionalDisconnect.write { value in
+      guard !value else { return false }
+      value = true
+      return true
+    }
+    guard changed else { return true }
+    self._intentionalDisconnect.value = true
+    self._process(closeCode: .protocolCode(.goingAway))
+    return true
+  }
+  
+  /// Processes the closing of the WebSocket connection with a specific close code.
+  /// This method properly closes the WebSocket connection using the provided close code, ensuring protocol compliance.
+  /// - Parameter closeCode: The close code indicating the reason for disconnection.
+  private func _process(closeCode: NWProtocolWebSocket.CloseCode) {
+    Logger.trace(.webSocket, "Process close", metadata: [
+      "endpoint": "\(self.endpoint)",
+      "code": "\(closeCode)"
+    ])
+    
+    self.disconnectTask.write {[weak self] task in
+      guard task == nil else { return }
+      task = Task {[weak self] in
+        guard let self else { return }
+        do {
+          try Task.checkCancellation()
+          await self._disconnect(closeCode: closeCode)
+        } catch {
+          Logger.trace(.webSocket, "Process close cancelled", metadata: [
+            "endpoint": "\(self.endpoint)",
+            "code": "\(closeCode)"
+          ])
+        }
+      }
+    }
+  }
+  
+  /// Performs the actual disconnection of the WebSocket connection using a specific close code.
+  /// This asynchronous method sends a close frame to the server and then shuts down the connection.
+  /// - Parameter closeCode: The `NWProtocolWebSocket.CloseCode` indicating the reason for disconnection.
+  private func _disconnect(closeCode: NWProtocolWebSocket.CloseCode) async {
+    Logger.trace(.webSocket, "Internal disconnect triggered", metadata: [
+      "endpoint": "\(self.endpoint)"
+    ])
+    do {
+      let meta = NWProtocolWebSocket.Metadata(opcode: .close)
+      meta.closeCode = closeCode
+      try await send(data: nil, opcode: .close, meta: meta)
+      Logger.trace(.webSocket, "Close message sent", metadata: [
+        "endpoint": "\(self.endpoint)",
+        "code": "\(closeCode)"
+      ])
+    } catch {
+      Logger.notice(.webSocket, "Close message failed", metadata: [
+        "endpoint": "\(self.endpoint)",
+        "error": "\(error)"
+      ])
+    }
+    self.connectivityTask.write { task in
+      task?.cancel()
+      task = nil
+    }
+    
+    self.listener.write { listener in
+      listener?.finish()
+      listener = nil
+    }
+    self.connection.write { connection in
+      connection?.cancel()
+      connection = nil
+    }
+  }
+  
+  // MARK: - Ping Pong
+  
+  /// Starts a timer to send ping messages at regular intervals, according to the configuration.
   private func _startPingPongTimer() {
     guard let delay = self.configuration.pingInterval else { return }
     self.pingPongTimer.write {[weak self] timer in
@@ -872,6 +960,7 @@ final class WebSocket: Sendable {
     }
   }
   
+  /// Stops the ping message timer when it is no longer needed, such as upon disconnection.
   private func _stopPingPongTimer() {
     self.pingPongTimer.write { timer in
       timer?.invalidate()
@@ -879,729 +968,3 @@ final class WebSocket: Sendable {
     }
   }
 }
-
-
-
-
-//
-//
-///// A WebSocket client that manages a socket connection.
-//open class NWWebSocket: WebSocketConnection {
-//
-//    // MARK: - Public properties
-//
-//    /// The WebSocket connection delegate.
-//    public weak var delegate: WebSocketConnectionDelegate?
-//
-//    /// The default `NWProtocolWebSocket.Options` for a WebSocket connection.
-//    ///
-//    /// These options specify that the connection automatically replies to Ping messages
-//    /// instead of delivering them to the `receiveMessage(data:context:)` method.
-//    public static var defaultOptions: NWProtocolWebSocket.Options {
-//        let options = NWProtocolWebSocket.Options()
-//        options.autoReplyPing = true
-//
-//        return options
-//    }
-//
-//    private let errorWhileWaitingLimit = 20
-//
-//    // MARK: - Private properties
-//
-//    private var connection: NWConnection?
-//    private let endpoint: NWEndpoint
-//    private let parameters: NWParameters
-//    private let connectionQueue: DispatchQueue
-//    private var pingTimer: Timer?
-//    private var disconnectionWorkItem: DispatchWorkItem?
-//    private var isMigratingConnection = false
-//    private var errorWhileWaitingCount = 0
-//
-//    // MARK: - Initialization
-//
-//    /// Creates a `NWWebSocket` instance which connects to a socket `url` with some configuration `options`.
-//    /// - Parameters:
-//    ///   - request: The `URLRequest` containing the connection endpoint `URL`.
-//    ///   - connectAutomatically: Determines if a connection should occur automatically on initialization.
-//    ///                           The default value is `false`.
-//    ///   - options: The configuration options for the connection. The default value is `NWWebSocket.defaultOptions`.
-//    ///   - connectionQueue: A `DispatchQueue` on which to deliver all connection events. The default value is `.main`.
-//    public convenience init(request: URLRequest,
-//                            connectAutomatically: Bool = false,
-//                            options: NWProtocolWebSocket.Options = NWWebSocket.defaultOptions,
-//                            connectionQueue: DispatchQueue = .main) {
-//
-//        self.init(url: request.url!,
-//                  connectAutomatically: connectAutomatically,
-//                  connectionQueue: connectionQueue)
-//    }
-//
-//    /// Creates a `NWWebSocket` instance which connects a socket `url` with some configuration `options`.
-//    /// - Parameters:
-//    ///   - url: The connection endpoint `URL`.
-//    ///   - connectAutomatically: Determines if a connection should occur automatically on initialization.
-//    ///                           The default value is `false`.
-//    ///   - options: The configuration options for the connection. The default value is `NWWebSocket.defaultOptions`.
-//    ///   - connectionQueue: A `DispatchQueue` on which to deliver all connection events. The default value is `.main`.
-//    public init(url: URL,
-//                connectAutomatically: Bool = false,
-//                options: NWProtocolWebSocket.Options = NWWebSocket.defaultOptions,
-//                connectionQueue: DispatchQueue = .main) {
-//
-//        endpoint = .url(url)
-//
-//        if url.scheme == "ws" {
-//            parameters = NWParameters.tcp
-//        } else {
-//            parameters = NWParameters.tls
-//        }
-//
-//        parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
-//
-//        self.connectionQueue = connectionQueue
-//
-//        if connectAutomatically {
-//            connect()
-//        }
-//    }
-//
-//    deinit {
-//        connection?.intentionalDisconnection = true
-//        connection?.cancel()
-//    }
-//
-//    // MARK: - WebSocketConnection conformance
-//
-//    /// Connect to the WebSocket.
-//    open func connect() {
-//        if connection == nil {
-//            connection = NWConnection(to: endpoint, using: parameters)
-//            connection?.stateUpdateHandler = { [weak self] state in
-//                self?.stateDidChange(to: state)
-//            }
-//            connection?.betterPathUpdateHandler = { [weak self] isAvailable in
-//                self?.betterPath(isAvailable: isAvailable)
-//            }
-//            connection?.viabilityUpdateHandler = { [weak self] isViable in
-//                self?.viabilityDidChange(isViable: isViable)
-//            }
-//            listen()
-//            connection?.start(queue: connectionQueue)
-//        } else if connection?.state != .ready && !isMigratingConnection {
-//            connection?.start(queue: connectionQueue)
-//        }
-//    }
-//
-//    /// Send a UTF-8 formatted `String` over the WebSocket.
-//    /// - Parameter string: The `String` that will be sent.
-//    open func send(string: String) {
-//        guard let data = string.data(using: .utf8) else {
-//            return
-//        }
-//        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-//        let context = NWConnection.ContentContext(identifier: "textContext",
-//                                                  metadata: [metadata])
-//
-//        send(data: data, context: context)
-//    }
-//
-//    /// Send some `Data` over the WebSocket.
-//    /// - Parameter data: The `Data` that will be sent.
-//    open func send(data: Data) {
-//        let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
-//        let context = NWConnection.ContentContext(identifier: "binaryContext",
-//                                                  metadata: [metadata])
-//
-//        send(data: data, context: context)
-//    }
-//
-//    /// Start listening for messages over the WebSocket.
-//    public func listen() {
-//        connection?.receiveMessage { [weak self] (data, context, _, error) in
-//            guard let self = self else {
-//                return
-//            }
-//
-//            if let data = data, !data.isEmpty, let context = context {
-//                self.receiveMessage(data: data, context: context)
-//            }
-//
-//            if let error = error {
-//                self.reportErrorOrDisconnection(error)
-//            } else {
-//                self.listen()
-//            }
-//        }
-//    }
-//
-//    /// Ping the WebSocket periodically.
-//    /// - Parameter interval: The `TimeInterval` (in seconds) with which to ping the server.
-//    open func ping(interval: TimeInterval) {
-//        pingTimer = .scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-//            guard let self = self else {
-//                return
-//            }
-//
-//            self.ping()
-//        }
-//        pingTimer?.tolerance = 0.01
-//    }
-//
-//    /// Ping the WebSocket once.
-//    open func ping() {
-//        let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
-//        metadata.setPongHandler(connectionQueue) { [weak self] error in
-//            guard let self = self else {
-//                return
-//            }
-//
-//            if let error = error {
-//                self.reportErrorOrDisconnection(error)
-//            } else {
-//                self.delegate?.webSocketDidReceivePong(connection: self)
-//            }
-//        }
-//        let context = NWConnection.ContentContext(identifier: "pingContext",
-//                                                  metadata: [metadata])
-//
-//        send(data: "ping".data(using: .utf8), context: context)
-//    }
-//
-//    /// Disconnect from the WebSocket.
-//    /// - Parameter closeCode: The code to use when closing the WebSocket connection.
-//    open func disconnect(closeCode: NWProtocolWebSocket.CloseCode = .protocolCode(.normalClosure)) {
-//        connection?.intentionalDisconnection = true
-//
-//        // Call `cancel()` directly for a `normalClosure`
-//        // (Otherwise send the custom closeCode as a message).
-//        if closeCode == .protocolCode(.normalClosure) {
-//            connection?.cancel()
-//            scheduleDisconnectionReporting(closeCode: closeCode,
-//                                           reason: nil)
-//        } else {
-//            let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
-//            metadata.closeCode = closeCode
-//            let context = NWConnection.ContentContext(identifier: "closeContext",
-//                                                      metadata: [metadata])
-//
-//            if connection?.state == .ready {
-//                // See implementation of `send(data:context:)` for `scheduleDisconnection(closeCode:, reason:)`
-//                send(data: nil, context: context)
-//            } else {
-//                scheduleDisconnectionReporting(closeCode: closeCode, reason: nil)
-//            }
-//        }
-//    }
-//
-//    // MARK: - Private methods
-//
-//    // MARK: Connection state changes
-//
-//    /// The handler for managing changes to the `connection.state` via the `stateUpdateHandler` on a `NWConnection`.
-//    /// - Parameter state: The new `NWConnection.State`
-//    private func stateDidChange(to state: NWConnection.State) {
-//        switch state {
-//        case .ready:
-//            isMigratingConnection = false
-//            delegate?.webSocketDidConnect(connection: self)
-//        case .waiting(let error):
-//            isMigratingConnection = false
-//            reportErrorOrDisconnection(error)
-//
-//            /// Workaround to prevent loop while reconnecting
-//            errorWhileWaitingCount += 1
-//            if errorWhileWaitingCount >= errorWhileWaitingLimit {
-//                tearDownConnection(error: error)
-//                errorWhileWaitingCount = 0
-//            }
-//        case .failed(let error):
-//            errorWhileWaitingCount = 0
-//            isMigratingConnection = false
-//            tearDownConnection(error: error)
-//        case .setup, .preparing:
-//            break
-//        case .cancelled:
-//            errorWhileWaitingCount = 0
-//            tearDownConnection(error: nil)
-//        @unknown default:
-//            fatalError()
-//        }
-//    }
-//
-//    /// The handler for informing the `delegate` if there is a better network path available
-//    /// - Parameter isAvailable: `true` if a better network path is available.
-//    private func betterPath(isAvailable: Bool) {
-//        if isAvailable {
-//            migrateConnection { [weak self] result in
-//                guard let self = self else {
-//                    return
-//                }
-//
-//                self.delegate?.webSocketDidAttemptBetterPathMigration(result: result)
-//            }
-//        }
-//    }
-//
-//    /// The handler for informing the `delegate` if the network connection viability has changed.
-//    /// - Parameter isViable: `true` if the network connection is viable.
-//    private func viabilityDidChange(isViable: Bool) {
-//        delegate?.webSocketViabilityDidChange(connection: self, isViable: isViable)
-//    }
-//
-//    /// Attempts to migrate the active `connection` to a new one.
-//    ///
-//    /// Migrating can be useful if the active `connection` detects that a better network path has become available.
-//    /// - Parameter completionHandler: Returns a `Result`with the new connection if the migration was successful
-//    /// or a `NWError` if the migration failed for some reason.
-//    private func migrateConnection(completionHandler: @escaping (Result<WebSocketConnection, NWError>) -> Void) {
-//        guard !isMigratingConnection else { return }
-//        connection?.intentionalDisconnection = true
-//        connection?.cancel()
-//        isMigratingConnection = true
-//        connection = NWConnection(to: endpoint, using: parameters)
-//        connection?.stateUpdateHandler = { [weak self] state in
-//            self?.stateDidChange(to: state)
-//        }
-//        connection?.betterPathUpdateHandler = { [weak self] isAvailable in
-//            self?.betterPath(isAvailable: isAvailable)
-//        }
-//        connection?.viabilityUpdateHandler = { [weak self] isViable in
-//            self?.viabilityDidChange(isViable: isViable)
-//        }
-//        listen()
-//        connection?.start(queue: connectionQueue)
-//    }
-//
-//    // MARK: Connection data transfer
-//
-//    /// Receive a WebSocket message, and handle it according to it's metadata.
-//    /// - Parameters:
-//    ///   - data: The `Data` that was received in the message.
-//    ///   - context: `ContentContext` representing the received message, and its metadata.
-//    private func receiveMessage(data: Data, context: NWConnection.ContentContext) {
-//        guard let metadata = context.protocolMetadata.first as? NWProtocolWebSocket.Metadata else {
-//            return
-//        }
-//
-//        switch metadata.opcode {
-//        case .binary:
-//            self.delegate?.webSocketDidReceiveMessage(connection: self,
-//                                                      data: data)
-//        case .cont:
-//            //
-//            break
-//        case .text:
-//            guard let string = String(data: data, encoding: .utf8) else {
-//                return
-//            }
-//            self.delegate?.webSocketDidReceiveMessage(connection: self,
-//                                                      string: string)
-//        case .close:
-//            scheduleDisconnectionReporting(closeCode: metadata.closeCode,
-//                                           reason: data)
-//        case .ping:
-//            // SEE `autoReplyPing = true` in `init()`.
-//            break
-//        case .pong:
-//            // SEE `ping()` FOR PONG RECEIVE LOGIC.
-//            break
-//        @unknown default:
-//            fatalError()
-//        }
-//    }
-//
-//    /// Send some `Data` over the  active `connection`.
-//    /// - Parameters:
-//    ///   - data: Some `Data` to send (this should be formatted as binary or UTF-8 encoded text).
-//    ///   - context: `ContentContext` representing the message to send, and its metadata.
-//    private func send(data: Data?, context: NWConnection.ContentContext) {
-//        connection?.send(content: data,
-//                         contentContext: context,
-//                         isComplete: true,
-//                         completion: .contentProcessed({ [weak self] error in
-//            guard let self = self else {
-//                return
-//            }
-//
-//            // If a connection closure was sent, inform delegate on completion
-//            if let socketMetadata = context.protocolMetadata.first as? NWProtocolWebSocket.Metadata,
-//               socketMetadata.opcode == .close {
-//                self.scheduleDisconnectionReporting(closeCode: socketMetadata.closeCode,
-//                                                    reason: data)
-//            }
-//
-//            if let error = error {
-//                self.reportErrorOrDisconnection(error)
-//            }
-//        }))
-//    }
-//
-//    // MARK: Connection cleanup
-//
-//    /// Schedules the reporting of a WebSocket disconnection.
-//    ///
-//    /// The disconnection will be actually reported once the underlying `NWConnection` has been fully torn down.
-//    /// - Parameters:
-//    ///   - closeCode: A `NWProtocolWebSocket.CloseCode` describing how the connection closed.
-//    ///   - reason: Optional extra information explaining the disconnection. (Formatted as UTF-8 encoded `Data`).
-//    private func scheduleDisconnectionReporting(closeCode: NWProtocolWebSocket.CloseCode,
-//                                                reason: Data?) {
-//        // Cancel any existing `disconnectionWorkItem` that was set first
-//        disconnectionWorkItem?.cancel()
-//
-//        disconnectionWorkItem = DispatchWorkItem { [weak self] in
-//            guard let self = self else { return }
-//            self.delegate?.webSocketDidDisconnect(connection: self,
-//                                                  closeCode: closeCode,
-//                                                  reason: reason)
-//        }
-//    }
-//
-//    /// Tear down the `connection`.
-//    ///
-//    /// This method should only be called in response to a `connection` which has entered either
-//    /// a `cancelled` or `failed` state within the `stateUpdateHandler` closure.
-//    /// - Parameter error: error description
-//    private func tearDownConnection(error: NWError?) {
-//        if let error = error, shouldReportNWError(error) {
-//            delegate?.webSocketDidReceiveError(connection: self, error: error)
-//        }
-//        pingTimer?.invalidate()
-//        connection?.cancel()
-//        connection = nil
-//
-//        if let disconnectionWorkItem = disconnectionWorkItem {
-//            connectionQueue.async(execute: disconnectionWorkItem)
-//        }
-//    }
-//
-//    /// Reports the `error` to the `delegate` (if appropriate) and if it represents an unexpected
-//    /// disconnection event, the disconnection will also be reported.
-//    /// - Parameter error: The `NWError` to inspect.
-//    private func reportErrorOrDisconnection(_ error: NWError) {
-//        if shouldReportNWError(error) {
-//            delegate?.webSocketDidReceiveError(connection: self, error: error)
-//        }
-//
-//        if isDisconnectionNWError(error) {
-//            let reasonData = "The websocket disconnected unexpectedly".data(using: .utf8)
-//            scheduleDisconnectionReporting(closeCode: .protocolCode(.goingAway),
-//                                           reason: reasonData)
-//        }
-//    }
-//
-//    /// Determine if a Network error should be reported.
-//    ///
-//    /// POSIX errors of either `ENOTCONN` ("Socket is not connected") or
-//    /// `ECANCELED` ("Operation canceled") should not be reported if the disconnection was intentional.
-//    /// All other errors should be reported.
-//    /// - Parameter error: The `NWError` to inspect.
-//    /// - Returns: `true` if the error should be reported.
-//    private func shouldReportNWError(_ error: NWError) -> Bool {
-//        if case let .posix(code) = error,
-//           code == .ENOTCONN || code == .ECANCELED,
-//           (connection?.intentionalDisconnection ?? false) {
-//            return false
-//        } else {
-//            return true
-//        }
-//    }
-//
-//    /// Determine if a Network error represents an unexpected disconnection event.
-//    /// - Parameter error: The `NWError` to inspect.
-//    /// - Returns: `true` if the error represents an unexpected disconnection event.
-//    private func isDisconnectionNWError(_ error: NWError) -> Bool {
-//        if case let .posix(code) = error,
-//           code == .ETIMEDOUT
-//            || code == .ENOTCONN
-//            || code == .ECANCELED
-//            || code == .ENETDOWN
-//            || code == .ECONNABORTED {
-//            return true
-//        } else {
-//            return false
-//        }
-//    }
-//}
-//
-//
-///// Defines a WebSocket connection.
-//public protocol WebSocketConnection {
-//    /// Connect to the WebSocket.
-//    func connect()
-//
-//    /// Send a UTF-8 formatted `String` over the WebSocket.
-//    /// - Parameter string: The `String` that will be sent.
-//    func send(string: String)
-//
-//    /// Send some `Data` over the WebSocket.
-//    /// - Parameter data: The `Data` that will be sent.
-//    func send(data: Data)
-//
-//    /// Start listening for messages over the WebSocket.
-//    func listen()
-//
-//    /// Ping the WebSocket periodically.
-//    /// - Parameter interval: The `TimeInterval` (in seconds) with which to ping the server.
-//    func ping(interval: TimeInterval)
-//
-//    /// Ping the WebSocket once.
-//    func ping()
-//
-//    /// Disconnect from the WebSocket.
-//    /// - Parameter closeCode: The code to use when closing the WebSocket connection.
-//    func disconnect(closeCode: NWProtocolWebSocket.CloseCode)
-//
-//    /// The WebSocket connection delegate.
-//    var delegate: WebSocketConnectionDelegate? { get set }
-//}
-//
-///// Defines a delegate for a WebSocket connection.
-//public protocol WebSocketConnectionDelegate: AnyObject {
-//    /// Tells the delegate that the WebSocket did connect successfully.
-//    /// - Parameter connection: The active `WebSocketConnection`.
-//    func webSocketDidConnect(connection: WebSocketConnection)
-//
-//    /// Tells the delegate that the WebSocket did disconnect.
-//    /// - Parameters:
-//    ///   - connection: The `WebSocketConnection` that disconnected.
-//    ///   - closeCode: A `NWProtocolWebSocket.CloseCode` describing how the connection closed.
-//    ///   - reason: Optional extra information explaining the disconnection. (Formatted as UTF-8 encoded `Data`).
-//    func webSocketDidDisconnect(connection: WebSocketConnection,
-//                                closeCode: NWProtocolWebSocket.CloseCode,
-//                                reason: Data?)
-//
-//    /// Tells the delegate that the WebSocket connection viability has changed.
-//    ///
-//    /// An example scenario of when this method would be called is a Wi-Fi connection being lost due to a device
-//    /// moving out of signal range, and then the method would be called again once the device moved back in range.
-//    /// - Parameters:
-//    ///   - connection: The `WebSocketConnection` whose viability has changed.
-//    ///   - isViable: A `Bool` indicating if the connection is viable or not.
-//    func webSocketViabilityDidChange(connection: WebSocketConnection,
-//                                     isViable: Bool)
-//
-//    /// Tells the delegate that the WebSocket has attempted a migration based on a better network path becoming available.
-//    ///
-//    /// An example of when this method would be called is if a device is using a cellular connection, and a Wi-Fi connection
-//    /// becomes available. This method will also be called if a device loses a Wi-Fi connection, and a cellular connection is available.
-//    /// - Parameter result: A `Result` containing the `WebSocketConnection` if the migration was successful, or a
-//    /// `NWError` if the migration failed for some reason.
-//    func webSocketDidAttemptBetterPathMigration(result: Result<WebSocketConnection, NWError>)
-//
-//    /// Tells the delegate that the WebSocket received an error.
-//    ///
-//    /// An error received by a WebSocket is not necessarily fatal.
-//    /// - Parameters:
-//    ///   - connection: The `WebSocketConnection` that received an error.
-//    ///   - error: The `NWError` that was received.
-//    func webSocketDidReceiveError(connection: WebSocketConnection,
-//                                  error: NWError)
-//
-//    /// Tells the delegate that the WebSocket received a 'pong' from the server.
-//    /// - Parameter connection: The active `WebSocketConnection`.
-//    func webSocketDidReceivePong(connection: WebSocketConnection)
-//
-//    /// Tells the delegate that the WebSocket received a `String` message.
-//    /// - Parameters:
-//    ///   - connection: The active `WebSocketConnection`.
-//    ///   - string: The UTF-8 formatted `String` that was received.
-//    func webSocketDidReceiveMessage(connection: WebSocketConnection,
-//                                    string: String)
-//
-//    /// Tells the delegate that the WebSocket received a binary `Data` message.
-//    /// - Parameters:
-//    ///   - connection: The active `WebSocketConnection`.
-//    ///   - data: The `Data` that was received.
-//    func webSocketDidReceiveMessage(connection: WebSocketConnection,
-//                                    data: Data)
-//}
-
-import Network
-
-fileprivate var _intentionalDisconnection: Bool = false
-
-internal extension NWConnection {
-
-    var intentionalDisconnection: Bool {
-        get {
-            return _intentionalDisconnection
-        }
-        set {
-            _intentionalDisconnection = newValue
-        }
-    }
-}
-
-
-//
-//import Foundation
-//import Network
-//
-//// Define the types of commands for your game to use.
-//enum GameMessageType: UInt32 {
-//  case invalid = 0
-//  case selectedCharacter = 1
-//  case move = 2
-//}
-
-// Create a class that implements a framing protocol.
-//class GameProtocol: NWProtocolFramerImplementation {
-//  let framer = NWProtocolWebSocket.definition
-//
-//  // Create a global definition of your game protocol to add to connections.
-//  static let definition = NWProtocolFramer.Definition(implementation: GameProtocol.self)
-//
-//  // Set a name for your protocol for use in debugging.
-//  static var label: String { return "TicTacToe" }
-//
-//  // Set the default behavior for most framing protocol functions.
-//  required init(framer: NWProtocolFramer.Instance) {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//    ])
-//  }
-//  func start(framer: NWProtocolFramer.Instance) -> NWProtocolFramer.StartResult {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//    ])
-//    return .willMarkReady
-//  }
-//  func wakeup(framer: NWProtocolFramer.Instance) {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//    ])
-//  }
-//  func stop(framer: NWProtocolFramer.Instance) -> Bool {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//    ])
-//    return true
-//  }
-//  func cleanup(framer: NWProtocolFramer.Instance) {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)"
-//      ]
-//    )
-//  }
-//
-//  // Whenever the application sends a message, add your protocol header and forward the bytes.
-//  func handleOutput(framer: NWProtocolFramer.Instance, message: NWProtocolFramer.Message, messageLength: Int, isComplete: Bool) {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//      "message": "\(message)",
-//      "length": "\(messageLength)",
-//      "isComplete": "\(isComplete)"
-//    ])
-//    // Extract the type of message.
-//    let type = message.gameMessageType
-//
-//    // Create a header using the type and length.
-//    let header = GameProtocolHeader(type: type.rawValue, length: UInt32(messageLength))
-//
-//    // Write the header.
-//    framer.writeOutput(data: header.encodedData)
-//
-//    // Ask the connection to insert the content of the app message after your header.
-//    do {
-//      try framer.writeOutputNoCopy(length: messageLength)
-//    } catch let error {
-//      print("Hit error writing \(error)")
-//    }
-//  }
-//
-//  // Whenever new bytes are available to read, try to parse out your message format.
-//  func handleInput(framer: NWProtocolFramer.Instance) -> Int {
-//    Logger.critical(.webSocket, "\(#function)", metadata: [
-//      "framer": "\(framer)",
-//    ])
-//    while true {
-//      // Try to read out a single header.
-//      var tempHeader: GameProtocolHeader? = nil
-//      let headerSize = GameProtocolHeader.encodedSize
-//      let parsed = framer.parseInput(minimumIncompleteLength: headerSize,
-//                       maximumLength: headerSize) { (buffer, isComplete) -> Int in
-//        guard let buffer = buffer else {
-//          return 0
-//        }
-//        if buffer.count < headerSize {
-//          return 0
-//        }
-//        tempHeader = GameProtocolHeader(buffer)
-//        return headerSize
-//      }
-//
-//            // If you can't parse out a complete header, stop parsing and return headerSize,
-//            // which asks for that many more bytes.
-//      guard parsed, let header = tempHeader else {
-//        return headerSize
-//      }
-//
-//      // Create an object to deliver the message.
-//      var messageType = GameMessageType.invalid
-//      if let parsedMessageType = GameMessageType(rawValue: header.type) {
-//        messageType = parsedMessageType
-//      }
-//      let message = NWProtocolFramer.Message(gameMessageType: messageType)
-//
-//      // Deliver the body of the message, along with the message object.
-//      if !framer.deliverInputNoCopy(length: Int(header.length), message: message, isComplete: true) {
-//        return 0
-//      }
-//    }
-//  }
-//}
-
-//// Extend framer messages to handle storing your command types in the message metadata.
-//extension NWProtocolFramer.Message {
-//  convenience init(gameMessageType: GameMessageType) {
-//    self.init(definition: GameProtocol.definition)
-//    self["GameMessageType"] = gameMessageType
-//  }
-//
-//  var gameMessageType: GameMessageType {
-//    if let type = self["GameMessageType"] as? GameMessageType {
-//      return type
-//    } else {
-//      return .invalid
-//    }
-//  }
-//}
-//
-//// Define a protocol header structure to help encode and decode bytes.
-//struct GameProtocolHeader: Codable {
-//  let type: UInt32
-//  let length: UInt32
-//
-//  init(type: UInt32, length: UInt32) {
-//    self.type = type
-//    self.length = length
-//  }
-//
-//  init(_ buffer: UnsafeMutableRawBufferPointer) {
-//    var tempType: UInt32 = 0
-//    var tempLength: UInt32 = 0
-//    withUnsafeMutableBytes(of: &tempType) { typePtr in
-//      typePtr.copyMemory(from: UnsafeRawBufferPointer(start: buffer.baseAddress!.advanced(by: 0),
-//                              count: MemoryLayout<UInt32>.size))
-//    }
-//    withUnsafeMutableBytes(of: &tempLength) { lengthPtr in
-//      lengthPtr.copyMemory(from: UnsafeRawBufferPointer(start: buffer.baseAddress!.advanced(by: MemoryLayout<UInt32>.size),
-//                                count: MemoryLayout<UInt32>.size))
-//    }
-//    type = tempType
-//    length = tempLength
-//  }
-//
-//  var encodedData: Data {
-//    var tempType = type
-//    var tempLength = length
-//    var data = Data(bytes: &tempType, count: MemoryLayout<UInt32>.size)
-//    data.append(Data(bytes: &tempLength, count: MemoryLayout<UInt32>.size))
-//    return data
-//  }
-//
-//  static var encodedSize: Int {
-//    return MemoryLayout<UInt32>.size * 2
-//  }
-//}

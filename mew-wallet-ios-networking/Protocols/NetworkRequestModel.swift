@@ -7,4 +7,4 @@
 
 import Foundation
 
-public protocol NetworkRequestModel {}
+public protocol NetworkRequestModel: Sendable {}

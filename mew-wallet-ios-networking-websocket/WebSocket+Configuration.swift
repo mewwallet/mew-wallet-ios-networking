@@ -8,9 +8,14 @@
 import Foundation
 
 extension WebSocket {
-  public struct Configuration {
+  public struct Configuration: Sendable {
+    public enum TLS: Sendable {
+      case disabled
+      case unpinned
+      case pinned(domain: String?, allowSelfSigned: Bool)
+    }
     /// Enables SSL Certificate Pinning
-    public let certificatePinning: Bool
+    public let tls: TLS
     /// An optional UInt64 representing the delay before retrying a connection in nanoseconds.
     public let reconnectDelay: UInt64?
     /// Automatically handle ping-pong loop
@@ -18,14 +23,14 @@ extension WebSocket {
     public let pingInterval: TimeInterval?
     
     public static let `default` = WebSocket.Configuration(
-      certificatePinning: true,
+      tls: .pinned(domain: nil, allowSelfSigned: false),
       reconnectDelay: 3.0,
       autoReplyPing: true,
-      pingInterval: 10.0
+      pingInterval: 5.0
     )
     
-    public init(certificatePinning: Bool, reconnectDelay: TimeInterval?, autoReplyPing: Bool, pingInterval: TimeInterval?) {
-      self.certificatePinning = certificatePinning
+    public init(tls: TLS, reconnectDelay: TimeInterval?, autoReplyPing: Bool, pingInterval: TimeInterval?) {
+      self.tls = tls
       if let reconnectDelay {
         self.reconnectDelay = UInt64(reconnectDelay * 1_000_000_000)
       } else {

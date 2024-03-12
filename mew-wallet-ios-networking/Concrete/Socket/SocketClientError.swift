@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SocketClientError: Error {
+public enum SocketClientError: Error, Sendable {
   case badFormat
   case responseEmpty
   case error(Int)

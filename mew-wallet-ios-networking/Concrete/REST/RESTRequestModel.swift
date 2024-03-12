@@ -9,7 +9,7 @@ import Foundation
 
 public struct RESTRequestModel: NetworkRequestModel {
   /// REST method, f.e. 'GET', 'POST'
-  public enum Method: RawRepresentable {
+  public enum Method: RawRepresentable, Sendable {
     public var rawValue: String {
       switch self {
       case .get:                  return "GET"

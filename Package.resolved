@@ -1,12 +1,22 @@
 {
+  "originHash" : "dcfe73765cf06ef8a7cfe4f2c59b0e6df704d06a710c55cace0e774814eea2f9",
   "pins" : [
     {
-      "identity" : "starscream",
+      "identity" : "swift-async-algorithms",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/daltoniam/Starscream.git",
+      "location" : "https://github.com/apple/swift-async-algorithms",
       "state" : {
-        "revision" : "ac6c0fc9da221873e01bd1a0d4818498a71eef33",
-        "version" : "4.0.6"
+        "revision" : "da4e36f86544cdf733a40d59b3a2267e3a7bbf36",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "94cf62b3ba8d4bed62680a282d4c25f9c63c2efb",
+        "version" : "1.1.0"
       }
     },
     {
@@ -26,7 +36,25 @@
         "revision" : "654ea6e32b9802c45468c4c743ed507c36a775c2",
         "version" : "1.0.2"
       }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-syntax.git",
+      "state" : {
+        "revision" : "64889f0c732f210a935a0ad7cda38f77f876262d",
+        "version" : "509.1.1"
+      }
+    },
+    {
+      "identity" : "swift-testing",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-testing.git",
+      "state" : {
+        "revision" : "3ed2f90058afe4437369aee4880890e7fa65d1ec",
+        "version" : "0.5.1"
+      }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

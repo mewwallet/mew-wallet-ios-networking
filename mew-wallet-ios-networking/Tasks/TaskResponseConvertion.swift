@@ -7,14 +7,14 @@
 
 import Foundation
 
-final class TaskResponseConvertion {
+final class TaskResponseConvertion: Sendable {
   let converter: NetworkResponseConverter
   
   init(converter: NetworkResponseConverter) {
     self.converter = converter
   }
   
-  func process(_ response: Any) async throws -> Any? {
+  func process(_ response: any Sendable) async throws -> (any Sendable)? {
     return try await converter.convert(response)
   }
 }

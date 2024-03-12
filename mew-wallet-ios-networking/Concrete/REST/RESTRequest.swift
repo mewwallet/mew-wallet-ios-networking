@@ -10,9 +10,9 @@ import Foundation
 struct RESTRequest: NetworkRequest {
   // MARK: - NetworkRequest
   
-  var request: Any?
+  let request: (any Sendable)?
   
-  init(request: Any?) {
+  init(request: (any Sendable)?) {
     self.request = request
   }
 }

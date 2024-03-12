@@ -7,8 +7,8 @@
 
 import Foundation
 
-public struct NetworkRequestConfig {
-  public enum Request {
+public struct NetworkRequestConfig: Sendable {
+  public enum Request: Sendable {
     case rest(NetworkRequestModel)
     case socket(NetworkRequestModel)
     
@@ -20,22 +20,22 @@ public struct NetworkRequestConfig {
     }
   }
   
-  public enum Deserialization {
+  public enum Deserialization: Sendable {
     case disable
     case custom(NetworkResponseDeserializer)
   }
   
-  public enum Validation {
+  public enum Validation: Sendable {
     case disable
     case custom(NetworkResponseValidator)
   }
   
-  public enum Conversion {
+  public enum Conversion: Sendable {
     case disable
     case custom(NetworkResponseConverter)
   }
   
-  public enum Mapping {
+  public enum Mapping: Sendable {
     case disable
     case custom(NetworkResponseMapper)
   }

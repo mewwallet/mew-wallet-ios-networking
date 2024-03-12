@@ -7,16 +7,14 @@
 
 import Foundation
 
-// newHeads provide in socket request to check if there is an active subscription
-
 struct SocketRequest: NetworkRequest {
   // MARK: - NetworkRequest
   
-  var request: Any?
+  var request: (any Sendable)?
   var subscription: Bool = false
   var publisherId: String? = nil
   
-  init(request: Any?) {
+  init(request: (any Sendable)?) {
     self.request = request
   }
 }

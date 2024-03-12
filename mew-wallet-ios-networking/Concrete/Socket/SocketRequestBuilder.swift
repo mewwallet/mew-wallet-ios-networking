@@ -8,7 +8,7 @@
 import Foundation
 
 final class SocketRequestBuilder: NetworkRequestBuilder {
-  func build(with config: NetworkRequestModel) async throws -> NetworkRequest {
+  func build(with config: NetworkRequestModel) async throws -> any NetworkRequest {
     guard let config = config as? SocketRequestModel else {
       throw SocketClientError.badFormat
     }

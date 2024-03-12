@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 
-public protocol NetworkClient {
-  func send(request: NetworkRequest) async throws -> Any
+public protocol NetworkClient: Sendable {
+  func send(request: any NetworkRequest) async throws -> any Sendable
+  @discardableResult func sendAndForget(request: NetworkRequest) async throws -> (any Sendable)?
 }

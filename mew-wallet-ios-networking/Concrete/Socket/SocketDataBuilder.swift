@@ -1,12 +1,12 @@
 import Foundation
 import mew_wallet_ios_extensions
 
-public protocol SocketDataBuilder {
+public protocol SocketDataBuilder: Sendable {
   func buildConnectionRequest(url: URL, headers: Headers) -> URLRequest
-  func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data)
-  func unwrap(data: Data) throws -> (ValueWrapper, Data)
+  func unwrap(request: any NetworkRequest) throws -> (IDWrapper, Data)
+  func unwrap(data: Data) throws -> (IDWrapper, Data)
   // swiftlint:disable:next large_tuple
-  func unwrap(response: String) throws -> (ValueWrapper?, ValueWrapper?, Data)
+  func unwrap(response: String) throws -> (IDWrapper?, IDWrapper?, Data)
 }
 
 public final class SocketDataBuilderImpl: SocketDataBuilder {
@@ -23,7 +23,7 @@ public final class SocketDataBuilderImpl: SocketDataBuilder {
     return request
   }
   
-  public func unwrap(request: NetworkRequest) throws -> (ValueWrapper, Data) {
+  public func unwrap(request: any NetworkRequest) throws -> (IDWrapper, Data) {
     if let data = request.request as? Data {
       return try self.unwrap(data: data)
     } else if let request = request.request as? URLRequest {
@@ -36,7 +36,7 @@ public final class SocketDataBuilderImpl: SocketDataBuilder {
     throw SocketClientError.badFormat
   }
   
-  public func unwrap(data: Data) throws -> (ValueWrapper, Data) {
+  public func unwrap(data: Data) throws -> (IDWrapper, Data) {
     guard let id = try decoder.decode(_UnwrappedData.self, from: data).id else {
       throw SocketClientError.badFormat
     }
@@ -44,7 +44,7 @@ public final class SocketDataBuilderImpl: SocketDataBuilder {
   }
   
   // swiftlint:disable:next large_tuple
-  public func unwrap(response: String) throws -> (ValueWrapper?, ValueWrapper?, Data) {
+  public func unwrap(response: String) throws -> (IDWrapper?, IDWrapper?, Data) {
     guard let data = response.data(using: .utf8) else {
       throw SocketClientError.badFormat
     }
@@ -65,20 +65,20 @@ private struct _UnwrappedData: Decodable {
   private enum SubscriptionCodingKeys: CodingKey {
     case subscription
   }
-  let id: ValueWrapper?
-  let subscriptionId: ValueWrapper?
+  let id: IDWrapper?
+  let subscriptionId: IDWrapper?
   
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.id = try container.decodeIfPresent(ValueWrapper.self, forKey: .id)
-    if let subscriptionId = try? container.decodeIfPresent(ValueWrapper.self, forKey: .result) {
+    self.id = try container.decodeIfPresent(IDWrapper.self, forKey: .id)
+    if let subscriptionId = try? container.decodeIfPresent(IDWrapper.self, forKey: .result) {
       self.subscriptionId = subscriptionId
     } else {
       guard let result = try? container.nestedContainer(keyedBy: SubscriptionCodingKeys.self, forKey: .params) else {
         self.subscriptionId = nil
         return
       }
-      self.subscriptionId = try? result.decodeIfPresent(ValueWrapper.self, forKey: .subscription)
+      self.subscriptionId = try? result.decodeIfPresent(IDWrapper.self, forKey: .subscription)
     }
   }
 }

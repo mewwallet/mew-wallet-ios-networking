@@ -16,6 +16,7 @@ extension WebSocket.Connectivity {
     case cancelled
     case failed
     case invalid
+    case tls
   }
 }
 
@@ -28,7 +29,7 @@ extension WebSocket.Connectivity {
 
 extension WebSocket {
   /// The WebSocket.Connectivity class is an extension of the WebSocket class, focusing on the management of WebSocket connection states and monitoring network connectivity changes. It is built to be thread-safe and utilizes Apple's Network framework (NWConnection) for network tasks.
-  final class Connectivity: Sendable {
+  public final class Connectivity: Sendable {
     private let _state = ThreadSafe<State>(.idle)
     /// A read-only property that returns the current state of the WebSocket connectivity, encapsulated within a ThreadSafe wrapper for thread safety.
     var state: State {
@@ -40,6 +41,7 @@ extension WebSocket {
     
     /// A ThreadSafe wrapper around an optional NWConnection, used to monitor the WebSocket connection.
     private let monitor = ThreadSafe<NWConnection?>(nil)
+    private let pinner: WebSocket.TLSPinner?
     /// A DispatchQueue used for executing network monitoring tasks.
     private let monitorQueue: DispatchQueue = .init(label: "mew-wallet-ios-networking-websocket.connectivity", qos: .utility)
     
@@ -57,41 +59,75 @@ extension WebSocket {
     /// - Parameters:
     ///   - url: The URL of the WebSocket connection to monitor.
     ///   - headers: Extra headers for connection
-    ///   ///   - options: `WebSocket` protocol options
+    ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    convenience init(url: URL, headers: [(name: String, value: String)] = [], options: NWProtocolWebSocket.Options? = nil, configuration: WebSocket.Configuration = .default) {
-      let parameters: NWParameters
-      
-      if url.scheme == "wss" || url.scheme == "https" {
-        parameters = NWParameters.tls
-      } else {
-        parameters = NWParameters.tcp
+    public convenience init(url: URL, headers: [(name: String, value: String)], options: NWProtocolWebSocket.Options? = nil, configuration: WebSocket.Configuration = .default) throws {
+      // Options
+      let options = NWProtocolWebSocket.Options()
+      if !headers.isEmpty {
+        options.setAdditionalHeaders(headers)
       }
       
-      self.init(url: url, parameters: parameters, options: options, configuration: configuration)
+      try self.init(
+        url: url,
+        options: [options],
+        configuration: configuration
+      )
     }
     
     /// A convenience initializer that sets up the `WebSocket.Connectivity` connection with the specified URL, parameters, and an optional delay.
     /// - Parameters:
     ///   - url: The URL of the WebSocket connection to monitor.
-    ///   - parameters: `NWParameters` used for the WebSocket connection, depending on whether the connection is secure (wss) or not (ws).
-    ///   ///   - options: `WebSocket` protocol options
+    ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    convenience init(url: URL, parameters: NWParameters, options: NWProtocolWebSocket.Options? = nil, configuration: WebSocket.Configuration = .default) {
-      self.init(endpoint: .url(url), parameters: parameters, options: options, configuration: configuration)
+    public convenience init(url: URL, options: [NWProtocolOptions] = [], configuration: WebSocket.Configuration = .default) throws {
+      try self.init(endpoint: .url(url), options: options, configuration: configuration)
     }
     
     /// The primary initializer that configures the `WebSocket.Connectivity` with the specified URL, parameters, and an optional delay.
     /// - Parameters:
     ///   - endpoint: The `NWEndpoint` of the WebSocket connection to monitor.
-    ///   - parameters: `NWParameters` used for the WebSocket connection, depending on whether the connection is secure (wss) or not (ws).
     ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    init(endpoint: NWEndpoint, parameters: NWParameters, options: NWProtocolWebSocket.Options? = nil, configuration: WebSocket.Configuration = .default) {
-      let options = options ?? NWProtocolWebSocket.Options()
-      options.autoReplyPing = configuration.autoReplyPing
-      options.skipHandshake = true
-      parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
+    public init(endpoint: NWEndpoint, options: [NWProtocolOptions] = [], configuration: WebSocket.Configuration = .default) throws {
+      // TLS Protocol
+      var protocolTLSOptions = (options.first(where: { $0 is NWProtocolTLS.Options }) as? NWProtocolTLS.Options)
+      switch configuration.tls {
+      case .disabled:
+        // We have nothing to do here, just use what we have
+        self.pinner = nil
+      case .unpinned:
+        // Make sure we have options
+        protocolTLSOptions = protocolTLSOptions ?? NWProtocolTLS.Options()
+        self.pinner = nil
+      case .pinned(let domain, let allowSelfSigned):
+        
+        // Make sure we have options and pinning is enabled
+        protocolTLSOptions = protocolTLSOptions ?? NWProtocolTLS.Options()
+        self.pinner = TLSPinner(domain: domain, allowSelfSigned: allowSelfSigned, endpoint: endpoint, options: protocolTLSOptions!, queue: self.monitorQueue)
+      }
+      
+      // TCP Protocol
+      let protocolTCPOptions = (options.first(where: { $0 is NWProtocolTCP.Options }) as? NWProtocolTCP.Options) ?? NWProtocolTCP.Options()
+      protocolTCPOptions.connectionTimeout = 5
+      protocolTCPOptions.persistTimeout = 5
+      
+      // WebSocket Protocol
+      let protocolWebSocketOptions = (options.first(where: { $0 is NWProtocolWebSocket.Options }) as? NWProtocolWebSocket.Options) ?? NWProtocolWebSocket.Options()
+      protocolWebSocketOptions.skipHandshake = true
+      protocolWebSocketOptions.autoReplyPing = configuration.autoReplyPing
+
+      // Prepare NWParameters
+      let parametersWebSocket = NWParameters(tls: protocolTLSOptions, tcp: protocolTCPOptions)
+      
+      // Add WebSocket to NWParameters
+      parametersWebSocket.defaultProtocolStack.applicationProtocols.insert(protocolWebSocketOptions, at: 0)
+      
+      // Prepare NWParameters
+      let parameters = NWParameters(tls: protocolTLSOptions, tcp: protocolTCPOptions)
+      
+      // Add WebSocket to NWParameters
+      parameters.defaultProtocolStack.applicationProtocols.insert(protocolWebSocketOptions, at: 0)
       
       self.configuration = configuration
       
@@ -175,7 +211,13 @@ extension WebSocket {
       switch state {
       case .cancelled:
         self.stop(with: .failure(Connectivity.Error.cancelled))
-      case .waiting:
+      case .waiting(let error):
+        switch error {
+        case .tls:
+          self.stop(with: .failure(.tls))
+        default:
+          break
+        }
         guard let delay = self.configuration.reconnectDelay else {
           self.stop(with: .failure(Connectivity.Error.failed))
           return

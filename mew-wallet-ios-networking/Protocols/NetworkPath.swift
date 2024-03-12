@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol NetworkPath {
+public protocol NetworkPath: Sendable {
   var isSocket: Bool { get }
   var path: String { get }
   var query: [URLQueryItem]? { get throws }

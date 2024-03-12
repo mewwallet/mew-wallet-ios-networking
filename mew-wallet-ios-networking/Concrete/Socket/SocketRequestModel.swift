@@ -9,12 +9,12 @@ import Foundation
 
 public struct SocketRequestModel: NetworkRequestModel {
   public let subscription: Bool
-  public var body: Any?
+  public var body: (any Sendable)?
   public var publisherId: String?
   
   public init(
     subscription: Bool,
-    body: Any? = nil,
+    body: (any Sendable)? = nil,
     publisherId: String? = nil
   ) {
     self.subscription = subscription

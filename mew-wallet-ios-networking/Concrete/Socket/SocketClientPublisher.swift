@@ -6,22 +6,25 @@
 //
 
 import Foundation
-import Combine
+import mew_wallet_ios_extensions
 
-struct SocketClientPublisher {
-  let publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>?
-  let continuation: CheckedContinuation<Any, Error>?
+struct SocketClientPublisher: Sendable {
+  private let _publisher = ThreadSafe<BroadcastAsyncStream<Result<NetworkResponse, Error>>?>(nil)
+  var publisher: BroadcastAsyncStream<Result<NetworkResponse, Error>>? {
+    return _publisher.value
+  }
+  let continuation: CheckedContinuation<any Sendable, Error>?
   
   init(
-    publisher: PassthroughSubject<Result<NetworkResponse, Error>, Never>? = nil,
-    continuation: CheckedContinuation<Any, Error>? = nil
+    publisher: BroadcastAsyncStream<Result<NetworkResponse, Error>>? = nil,
+    continuation: CheckedContinuation<any Sendable, Error>? = nil
   ) {
-    self.publisher = publisher
+    self._publisher.value = publisher
     self.continuation = continuation
   }
   
   func send(signal: Result<NetworkResponse, Error>) {
-    publisher?.send(signal)
+    _publisher.value?.yield(signal)
     do {
       let result = try signal.get()
       continuation?.resume(returning: result)
@@ -31,12 +34,24 @@ struct SocketClientPublisher {
   }
   
   func complete(signal: Result<NetworkResponse, Error>) {
-    publisher?.send(completion: .finished)
+    _publisher.value?.finish()
     do {
       let result = try signal.get()
       continuation?.resume(returning: result)
     } catch {
       continuation?.resume(throwing: error)
     }
+  }
+}
+
+extension SocketClientPublisher: Equatable {
+  static func == (lhs: SocketClientPublisher, rhs: SocketClientPublisher) -> Bool {
+    return lhs.publisher?.id == rhs.publisher?.id
+  }
+}
+
+extension SocketClientPublisher: Hashable {
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(publisher)
   }
 }

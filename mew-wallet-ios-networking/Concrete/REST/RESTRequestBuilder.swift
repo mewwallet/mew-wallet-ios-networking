@@ -35,7 +35,7 @@ final class RESTRequestBuilder: NetworkRequestBuilder {
     baseComponents = initComponents
   }
   
-  func build(with config: NetworkRequestModel) async throws -> NetworkRequest {
+  func build(with config: NetworkRequestModel) async throws -> any NetworkRequest {
     guard let config = config as? RESTRequestModel else { throw BuilderError.invalidModel }
     var components: URLComponents
     

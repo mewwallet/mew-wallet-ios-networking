@@ -7,14 +7,14 @@
 
 import Foundation
 
-final class TaskResponseValidation {
+final class TaskResponseValidation: Sendable {
   let validator: NetworkResponseValidator
   
   init(validator: NetworkResponseValidator) {
     self.validator = validator
   }
   
-  func process(_ response: Any) async throws {
+  func process(_ response: any Sendable) async throws {
     try await validator.validate(response)
   }
 }

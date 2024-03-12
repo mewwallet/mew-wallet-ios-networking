@@ -6,16 +6,19 @@
 //
 
 import Foundation
-import Combine
 
-final class TaskNetworkRequest {
+final class TaskNetworkRequest: Sendable {
   let client: NetworkClient
   
   init(client: NetworkClient) {
     self.client = client
   }
   
-  func process(_ request: NetworkRequest) async throws -> Any {
+  func process(_ request: any NetworkRequest) async throws -> any Sendable {
     return try await client.send(request: request)
+  }
+  
+  func processAndForget(_ request: NetworkRequest) async throws -> (any Sendable)? {
+    try await client.sendAndForget(request: request)
   }
 }

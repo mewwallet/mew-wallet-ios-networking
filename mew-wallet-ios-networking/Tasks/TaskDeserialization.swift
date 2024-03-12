@@ -7,14 +7,14 @@
 
 import Foundation
 
-final class TaskDeserialization {
+final class TaskDeserialization: Sendable {
   let deserializer: NetworkResponseDeserializer
   
   init(deserializer: NetworkResponseDeserializer) {
     self.deserializer = deserializer
   }
   
-  func process(_ response: NetworkResponse) async throws -> Any {
+  func process(_ response: NetworkResponse) async throws -> any Sendable {
     return try await self.deserializer.deserialize(response)
   }
 }

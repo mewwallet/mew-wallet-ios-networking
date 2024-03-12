@@ -8,7 +8,7 @@
 import Foundation
 import Network
 
-final class MockWebSocketServer {
+@MainActor final class MockWebSocketServer {
   enum Error: Swift.Error {
     case badConfiguration
     case cantRun(Swift.Error)
@@ -23,7 +23,7 @@ final class MockWebSocketServer {
   public var pingReceived: Bool = false
   public var pongReceived: Bool = false
 
-  init(port: UInt16) throws {
+  @MainActor init(port: UInt16) throws {
     guard let port = NWEndpoint.Port(rawValue: port) else {
       throw Error.badConfiguration
     }
@@ -45,10 +45,14 @@ final class MockWebSocketServer {
         listener = try NWListener(using: self.parameters, on: self.port)
       }
       listener?.stateUpdateHandler = {[weak self] state in
-        self?._process(state: state)
+        Task { @MainActor [weak self] in
+          self?._process(state: state)
+        }
       }
       listener?.newConnectionHandler = {[weak self] connection in
-        self?._process(connection: connection)
+        Task { @MainActor [weak self] in
+          self?._process(connection: connection)
+        }
       }
       listener?.start(queue: listenerQueue)
     } catch {
@@ -99,7 +103,9 @@ final class MockWebSocketServer {
     }
     if state == .ready {
       self.pingTimer = Timer(timeInterval: 1.0, repeats: true, block: {[weak self] _ in
-        self?._ping()
+        Task { @MainActor [weak self] in
+          self?._ping()
+        }
       })
       self.pingTimer?.tolerance = 0.1
       RunLoop.main.add(self.pingTimer!, forMode: .common)

@@ -7,8 +7,8 @@
 
 import Foundation
 
-public protocol NetworkRequest {
-  var request: Any? { get }
+public protocol NetworkRequest: Sendable {
+  var request: (any Sendable)? { get }
   
-  init(request: Any?)
+  init(request: (any Sendable)?)
 }

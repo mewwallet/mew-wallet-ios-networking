@@ -7,6 +7,6 @@
 
 import Foundation
 
-public protocol NetworkResponseConverter {
-  func convert(_ data: Any) async throws -> Any?
+public protocol NetworkResponseConverter: Sendable {
+  func convert(_ data: any Sendable) async throws -> (any Sendable)?
 }

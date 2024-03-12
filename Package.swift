@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 5.10
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -18,26 +18,33 @@ let package = Package(
       targets: ["mew-wallet-ios-networking-websocket"])
   ],
   dependencies: [
-    .package(url: "https://github.com/daltoniam/Starscream.git", .upToNextMajor(from: "4.0.6")),
-//    .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "1.0.0")),
-//    .package(url: "git@github.com:mewwallet/mew-wallet-ios-logger.git", .upToNextMajor(from: "2.0.0"))
-      .package(path: "../mew-wallet-ios-extensions"),
-      .package(path: "../mew-wallet-ios-logger"),
-//      .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "1.0.0")),
-//      .package(url: "git@github.com:mewwallet/mew-wallet-ios-logger.git", .upToNextMajor(from: "2.0.0"))
+    .package(url: "https://github.com/apple/swift-testing.git", from: "0.5.1"),
+    .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "1.1.0")),
+    .package(url: "git@github.com:mewwallet/mew-wallet-ios-logger.git", .upToNextMajor(from: "2.0.1")),
+      .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0")
   ],
   targets: [
     .target(
       name: "mew-wallet-ios-networking",
       dependencies: [
-        "Starscream",
+        "mew-wallet-ios-networking-websocket",
         .product(name: "mew-wallet-ios-extensions", package: "mew-wallet-ios-extensions"),
         .product(name: "mew-wallet-ios-logger", package: "mew-wallet-ios-logger")
       ],
-      path: "mew-wallet-ios-networking"),
+      path: "mew-wallet-ios-networking",
+      resources: [
+        .copy("Privacy/PrivacyInfo.xcprivacy")
+      ],
+      swiftSettings: [
+        .enableExperimentalFeature("StrictConcurrency=complete")
+      ]
+    ),
     .testTarget(
-      name: "mew-wallet-ios-networkingTests",
-      dependencies: ["mew-wallet-ios-networking"],
+      name: "mew-wallet-ios-networking-tests",
+      dependencies: [
+        "mew-wallet-ios-networking",
+        .product(name: "Testing", package: "swift-testing")
+      ],
       path: "Tests/mew-wallet-ios-networking-tests"
     ),
     
@@ -49,6 +56,9 @@ let package = Package(
         .product(name: "mew-wallet-ios-logger", package: "mew-wallet-ios-logger")
       ],
       path: "mew-wallet-ios-networking-websocket",
+      resources: [
+        .copy("Privacy/PrivacyInfo.xcprivacy")
+      ],
       swiftSettings: [
         .enableExperimentalFeature("StrictConcurrency=complete")
       ]
@@ -57,7 +67,8 @@ let package = Package(
       name: "mew-wallet-ios-networking-websocket-tests",
       dependencies: [
         "mew-wallet-ios-networking-websocket",
-        .product(name: "mew-wallet-ios-logger", package: "mew-wallet-ios-logger")
+        .product(name: "Testing", package: "swift-testing"),
+        .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
       ],
       path: "Tests/mew-wallet-ios-networking-websocket-tests"
     )

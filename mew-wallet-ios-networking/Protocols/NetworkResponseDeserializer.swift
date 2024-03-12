@@ -7,6 +7,6 @@
 
 import Foundation
 
-public protocol NetworkResponseDeserializer {
-  func deserialize(_ data: NetworkResponse) async throws -> Any
+public protocol NetworkResponseDeserializer: Sendable {
+  func deserialize(_ data: NetworkResponse) async throws -> any Sendable
 }
