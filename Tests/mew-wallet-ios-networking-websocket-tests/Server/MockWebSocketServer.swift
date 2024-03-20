@@ -7,6 +7,8 @@
 
 import Foundation
 import Network
+import os
+import wcpm_logger
 
 @MainActor final class MockWebSocketServer {
   enum Error: Swift.Error {
@@ -89,17 +91,23 @@ import Network
   private func _process(state: NWListener.State) {
     switch state {
     case .setup:
-      debugPrint(">> 🟨 Server: setup")
+      Logger.debug(.mockWebSocketServer, ">> 🟨 Server: setup")
     case .waiting(let error):
-      debugPrint(">> 🟧 Server: Waiting. Error: \(error.localizedDescription)")
+      Logger.debug(.mockWebSocketServer, ">> 🟧 Server: Waiting", metadata: [
+        "error": "\(error)"
+      ])
     case .ready:
-      debugPrint(">> 🟩 Server: Ready")
+      Logger.debug(.mockWebSocketServer, ">> 🟩 Server: Ready")
     case .failed(let error):
-      debugPrint(">> ❌ Server: Failed. Error: \(error.localizedDescription)")
+      Logger.debug(.mockWebSocketServer, ">> ❌ Server: Failed", metadata: [
+        "error": "\(error)"
+      ])
     case .cancelled:
-      debugPrint(">> 🟥 Server: Cancelled")
+      Logger.debug(.mockWebSocketServer, ">> 🟥 Server: Cancelled")
     @unknown default:
-      debugPrint(">> ❓ Server: Unknown. State: \(state)")
+      Logger.debug(.mockWebSocketServer, ">> ❓ Server: Unknown.", metadata: [
+        "state": "\(state)"
+      ])
     }
     if state == .ready {
       self.pingTimer = Timer(timeInterval: 1.0, repeats: true, block: {[weak self] _ in
@@ -118,7 +126,9 @@ import Network
   private func _process(connection: NWConnection) {
     let connection = Connection(connection)
     self.connections[connection.id] = connection
-    debugPrint(">> 🟩 Server: New connection. ID: \(connection.id)")
+    Logger.debug(.mockWebSocketServer, ">> 🟩 Server: New connection", metadata: [
+      "id": "\(connection.id)"
+    ])
     
     connection.run()
     

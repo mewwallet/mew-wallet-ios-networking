@@ -20,13 +20,21 @@ extension WebSocket {
     public let reconnectDelay: UInt64?
     /// Automatically handle ping-pong loop
     public let autoReplyPing: Bool
+    /// Interval between ping messages
     public let pingInterval: TimeInterval?
     
     public static let `default` = WebSocket.Configuration(
       tls: .pinned(domain: nil, allowSelfSigned: false),
-      reconnectDelay: 3.0,
+      reconnectDelay: 5.0,
       autoReplyPing: true,
-      pingInterval: 5.0
+      pingInterval: 20.0
+    )
+    
+    public static let defaultNoPinning = WebSocket.Configuration(
+      tls: .disabled,
+      reconnectDelay: 5.0,
+      autoReplyPing: true,
+      pingInterval: 20.0
     )
     
     public init(tls: TLS, reconnectDelay: TimeInterval?, autoReplyPing: Bool, pingInterval: TimeInterval?) {

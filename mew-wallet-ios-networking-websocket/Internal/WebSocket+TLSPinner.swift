@@ -37,7 +37,11 @@ extension WebSocket {
           guard case .name(let string, _) = host else { break }
           domain = string
         case .url(let url):
-          domain = url.host()
+          if #available(iOS 16.0, macOS 13.0, *) {
+            domain = url.host()
+          } else {
+            domain = url.host
+          }
         default:
           break
         }

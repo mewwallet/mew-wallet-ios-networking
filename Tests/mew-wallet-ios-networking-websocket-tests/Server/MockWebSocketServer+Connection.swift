@@ -7,6 +7,8 @@
 
 import Foundation
 import Network
+import os
+import wcpm_logger
 
 extension MockWebSocketServer {
   final class Connection {
@@ -64,10 +66,10 @@ extension MockWebSocketServer {
       let meta = NWProtocolWebSocket.Metadata(opcode: .ping)
       meta.setPongHandler(self.connectionQueue) {[weak self] error in
         guard let self else { return }
-        debugPrint(">> Client[\(self.id)]. Pong error: \(String(describing: error))")
+        Logger.debug(.mockWebSocketServer, ">> Client[\(self.id)]. Pong error: \(String(describing: error))")
       }
       let context = NWConnection.ContentContext(identifier: "ping", metadata: [meta])
-      debugPrint(">> Client[\(id)]. Send ping")
+      Logger.debug(.mockWebSocketServer, ">> Client[\(id)]. Send ping")
       send(data: nil, context: context)
     }
     
@@ -78,10 +80,10 @@ extension MockWebSocketServer {
                       completion: .contentProcessed({[weak self] error in
         guard let self else { return }
         if let error {
-          debugPrint(">> Client[\(id)]. Sent: error - \(error)")
+          Logger.debug(.mockWebSocketServer, ">> Client[\(id)]. Sent: error - \(error)")
           return
         }
-        debugPrint(">> Client[\(id)]. Sent: size - \(data?.count ?? 0)")
+        Logger.debug(.mockWebSocketServer, ">> Client[\(id)]. Sent: size - \(data?.count ?? 0)")
       }))
     }
     
@@ -103,20 +105,20 @@ extension MockWebSocketServer {
     private func _process(state: NWConnection.State) {
       switch state {
       case .setup:
-        debugPrint("__ 🟨 Client[\(id)]: Setup")
+        Logger.debug(.mockWebSocketServer, "__ 🟨 Client[\(id)]: Setup")
       case .waiting(let error):
-        debugPrint("__ 🟧 Client[\(id)]: Waiting. Error: \(error.localizedDescription)")
+        Logger.debug(.mockWebSocketServer, "__ 🟧 Client[\(id)]: Waiting. Error: \(error.localizedDescription)")
       case .preparing:
-        debugPrint("__ 🟨 Client[\(id)]: Preparing")
+        Logger.debug(.mockWebSocketServer, "__ 🟨 Client[\(id)]: Preparing")
       case .ready:
-        debugPrint("__ 🟩 Client[\(id)]: Ready")
+        Logger.debug(.mockWebSocketServer, "__ 🟩 Client[\(id)]: Ready")
         self.listen()
       case .failed(let error):
-        debugPrint("__ ❌ Client[\(id)]: Failed. Error: \(error.localizedDescription)")
+        Logger.debug(.mockWebSocketServer, "__ ❌ Client[\(id)]: Failed. Error: \(error.localizedDescription)")
       case .cancelled:
-        debugPrint("__ 🟥 Client[\(id)]: Cancelled")
+        Logger.debug(.mockWebSocketServer, "__ 🟥 Client[\(id)]: Cancelled")
       @unknown default:
-        debugPrint("__ ❓ Client[\(id)]: Unknown. State: \(state)")
+        Logger.debug(.mockWebSocketServer, "__ ❓ Client[\(id)]: Unknown. State: \(state)")
       }
     }
     
@@ -127,10 +129,10 @@ extension MockWebSocketServer {
       
       switch metadata.opcode {
       case .binary:
-        debugPrint("<< Client[\(id)]. Binary: size - \(content?.count ?? 0)")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Binary: size - \(content?.count ?? 0)")
         eventHandler(self, .binary(content))
       case .cont:
-        debugPrint("<< Client[\(id)]. Cont")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Cont")
       case .text:
         let string: String?
         if let content {
@@ -138,19 +140,19 @@ extension MockWebSocketServer {
         } else {
           string = nil
         }
-        debugPrint("<< Client[\(id)]. Text: content - \(String(describing: string))")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Text: content - \(String(describing: string))")
         eventHandler(self, .text(string))
       case .close:
-        debugPrint("<< Client[\(id)]. Close")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Close")
         eventHandler(self, .close)
       case .ping:
-        debugPrint("<< Client[\(id)]. Ping")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Ping")
         eventHandler(self, .ping)
       case .pong:
-        debugPrint("<< Client[\(id)]. Pong")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Pong")
         eventHandler(self, .pong)
       @unknown default:
-        debugPrint("<< Client[\(id)]. Unknown: opcode - \(metadata.opcode)")
+        Logger.debug(.mockWebSocketServer, "<< Client[\(id)]. Unknown: opcode - \(metadata.opcode)")
       }
     }
   }

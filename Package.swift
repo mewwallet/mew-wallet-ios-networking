@@ -21,7 +21,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-testing.git", from: "0.5.1"),
     .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "1.1.0")),
     .package(url: "git@github.com:mewwallet/mew-wallet-ios-logger.git", .upToNextMajor(from: "2.0.1")),
-      .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0")
+    .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0")
   ],
   targets: [
     .target(

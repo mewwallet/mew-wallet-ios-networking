@@ -25,7 +25,13 @@ public final class SocketNetworkClient: NetworkClient {
     self.headers = headers
     self.dataBuilder = dataBuilder
     do {
-      self.socket = try WebSocket(url: self.url, headers: self.headers.array)
+      let configuration: WebSocket.Configuration
+      if url.scheme == "ws" || url.scheme == "http" {
+        configuration = .defaultNoPinning
+      } else {
+        configuration = .default
+      }
+      self.socket = try WebSocket(url: self.url, headers: self.headers.array, configuration: configuration)
       self.connect()
     } catch {
       fatalError()

@@ -80,19 +80,6 @@ enum EchoWS: APINetworkPath {
   
   func taskDrySubscriptionResult<R>(from subscriptionId: String?, provider: any GenericNetworkProvider) throws -> APITask<R> where R : Sendable {
     throw APINetworkPathError.notImplemented
-//    guard case .newHeadsSubscriptionId(let payload) = self else {
-//      throw Error.badMethod
-//    }
-//    guard let subscriptionId = subscriptionId else {
-//      throw SocketClientError.badFormat
-//    }
-//    let dataUnwrapper = SocketDataBuilderImpl()
-//    let (id, _) = try dataUnwrapper.unwrap(data: payload)
-//    let response = JSONRPC.Response<String>(id: id.stringValue ?? String(id.intValue ?? 0), result: subscriptionId)
-//    let encoder = JSONEncoder()
-//    return APITask<R>(path: self) {
-//      try encoder.encode(response) as! R
-//    }
   }
   
   func taskSubscriptionId<R>(result: R) throws -> String? {
