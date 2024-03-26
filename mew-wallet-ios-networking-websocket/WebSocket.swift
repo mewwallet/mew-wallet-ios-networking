@@ -10,12 +10,11 @@ import Network
 import mew_wallet_ios_extensions
 import mew_wallet_ios_logger
 
-// Path changing?
-
 /// `WebSocket` is a public final class designed to handle WebSocket connections in a thread-safe manner, supporting both secure (wss) and insecure (ws) protocols.
 /// It provides functionality for connecting to a WebSocket server, sending and receiving messages, and handling ping/pong messages for connection keep-alive.
 /// TODO: Currently `WebSocket` doesn't handle `betterPathUpdateHandler`
 public final class WebSocket: Sendable {
+  private let id = UUID()
   /// State
   
   /// A thread-safe wrapper for the connection state.
@@ -55,7 +54,7 @@ public final class WebSocket: Sendable {
   private let pinner: WebSocket.TLSPinner?
   
   /// The dispatch queue used for connection-related operations, ensuring thread safety.
-  private let connectionQueue: DispatchQueue = .init(label: "mew-wallet-ios-networking-websocket.connectionQeueu", qos: .utility)
+  private let connectionQueue: DispatchQueue = .init(label: "networking-websocket.connectionQeueu", qos: .utility)
   
   /// A thread-safe reference to an `AsyncStream` continuation for broadcasting WebSocket events to listeners.
   private let listener = ThreadSafe<AsyncStream<Event>.Continuation?>(nil)
@@ -178,7 +177,8 @@ public final class WebSocket: Sendable {
     Logger.trace(.webSocket, "Initialized", metadata: [
       "endpoint": "\(self.endpoint)",
       "parameters": "\(self.parameters)",
-      "configuration": "\(self.configuration)"
+      "configuration": "\(self.configuration)",
+      "id": "\(self.id)"
     ])
   }
   
@@ -186,7 +186,8 @@ public final class WebSocket: Sendable {
     // Cleanup code to ensure resources are properly released when the WebSocket instance is deallocated.
     self._discardConsumers()
     Logger.trace(.webSocket, "Deinit", metadata: [
-      "endpoint": "\(self.endpoint)"
+      "endpoint": "\(self.endpoint)",
+      "id": "\(self.id)"
     ])
   }
   
@@ -200,7 +201,8 @@ public final class WebSocket: Sendable {
     self._change(state: .pending, from: .disconnected)
     
     Logger.trace(.webSocket, "New consumer", metadata: [
-      "endpoint": "\(self.endpoint)"
+      "endpoint": "\(self.endpoint)",
+      "id": "\(self.id)"
     ])
     return AsyncStream {[weak self] (continuation: AsyncStream<Event>.Continuation) in
       guard let self else {
@@ -212,7 +214,8 @@ public final class WebSocket: Sendable {
       let consumer = self._add(consumer: continuation)
       Logger.trace(.webSocket, "New consumer added", metadata: [
         "endpoint": "\(self.endpoint)",
-        "consumer": "\(consumer.uuid)"
+        "consumer": "\(consumer.uuid)",
+        "id": "\(self.id)"
       ])
       
       self._connectIfNeeded()
@@ -325,13 +328,13 @@ public final class WebSocket: Sendable {
                       contentContext: context,
                       isComplete: true,
                       completion: .contentProcessed({ error in
-        self._pendingRequests.write { pendings in
-          pendings.removeValue(forKey: id)
+        let continuation = self._pendingRequests.write { pendings in
+          return pendings.removeValue(forKey: id)
         }
         if let error {
-          continuation.resume(throwing: error)
+          continuation?.resume(throwing: error)
         } else {
-          continuation.resume()
+          continuation?.resume()
         }
       }))
     }
@@ -363,7 +366,8 @@ public final class WebSocket: Sendable {
       Logger.trace(.webSocket, "Consumer disconnected", metadata: [
         "endpoint": "\(self.endpoint)",
         "uuid": "\(consumer.uuid)",
-        "reason": "\(reason)"
+        "reason": "\(reason)",
+        "id": "\(self.id)"
       ])
       
       self._remove(consumer: consumer)
@@ -399,11 +403,13 @@ public final class WebSocket: Sendable {
 #if DEBUG
     Logger.trace(.webSocket, "Consumers discarded", metadata: [
       "endpoint": "\(self.endpoint)",
-      "active": "\(self.consumers.value.count)"
+      "active": "\(self.consumers.value.count)",
+      "id": "\(self.id)"
     ])
 #else
     Logger.trace(.webSocket, "Consumers discarded", metadata: [
-      "endpoint": "\(self.endpoint)"
+      "endpoint": "\(self.endpoint)",
+      "id": "\(self.id)"
     ])
 #endif
   }
@@ -433,7 +439,8 @@ public final class WebSocket: Sendable {
             
             Logger.trace(.webSocket, "Connection state changed", metadata: [
               "endpoint": "\(self.endpoint)",
-              "state": "\(state)"
+              "state": "\(state)",
+              "id": "\(self.id)"
             ])
             
             defer {
@@ -445,7 +452,8 @@ public final class WebSocket: Sendable {
             if let event = self._process(state: state) {
               Logger.trace(.webSocket, "Processed event", metadata: [
                 "endpoint": "\(self.endpoint)",
-                "event": "\(event)"
+                "event": "\(event)",
+                "id": "\(self.id)"
               ])
               let success = self._broadcast(event)
               guard success else { return }
@@ -456,15 +464,17 @@ public final class WebSocket: Sendable {
                   guard task == nil else { return }
                   task = Task {[weak self] in
                     guard let self else { return }
-                    Logger.trace(.webSocket, "Waiting for stream")
+                    Logger.trace(.webSocket, "Waiting for stream", metadata: [
+                      "id": "\(self.id)"
+                    ])
                     for await event in self._listenStream() {
                       let success = self._broadcast(event)
-                      guard success else {
-                        return
-                      }
+                      guard success else { return }
                     }
                     self.listenerTask.value = nil
-                    Logger.trace(.webSocket, "Stream finished")
+                    Logger.trace(.webSocket, "Stream finished", metadata: [
+                      "id": "\(self.id)"
+                    ])
                   }
                 }
               case .disconnected:
@@ -479,7 +489,8 @@ public final class WebSocket: Sendable {
             guard let self else { return }
             Logger.trace(.webSocket, "Better path availability changed", metadata: [
               "endpoint": "\(self.endpoint)",
-              "available": "\(isAvailable)"
+              "available": "\(isAvailable)",
+              "id": "\(self.id)"
             ])
           }
 #if DEBUG
@@ -487,7 +498,8 @@ public final class WebSocket: Sendable {
             guard let self else { return }
             Logger.trace(.webSocket, "Path changed", metadata: [
               "endpoint": "\(self.endpoint)",
-              "available": "\(path)"
+              "available": "\(path)",
+              "id": "\(self.id)"
             ])
           }
 #endif
@@ -495,7 +507,8 @@ public final class WebSocket: Sendable {
             guard let self else { return }
             Logger.trace(.webSocket, "Viability changed", metadata: [
               "endpoint": "\(self.endpoint)",
-              "viable": "\(isViable)"
+              "viable": "\(isViable)",
+              "id": "\(self.id)"
             ])
             self._broadcast(.viabilityDidChange(isViable))
           }
@@ -549,21 +562,19 @@ public final class WebSocket: Sendable {
   /// - Parameter continuation: The `AsyncStream<Event>.Continuation` that will receive decoded messages and events.
   private func _listen(_ continuation: AsyncStream<Event>.Continuation) {
     /// Start listening for messages over the WebSocket.
-    guard !self._intentionalDisconnect.value else {
-      return
-    }
+    guard !self._intentionalDisconnect.value else { return }
     let connection = self.connection.value
     connection?.receiveMessage {[weak self] content, contentContext, isComplete, error in
       guard let self else { return }
       guard !self._intentionalDisconnect.value else { return }
       
-      if let contentContext,
-         let event = self._process(content: content, context: contentContext) {
-        let result = continuation.yield(event)
-        if case .terminated = result { return }
-      }
-      
       do {
+        if let contentContext,
+           let event = try self._process(content: content, context: contentContext) {
+          let result = continuation.yield(event)
+          if case .terminated = result { return }
+        }
+      
         if let error,
            let event = try self._process(error: error) {
           let result = continuation.yield(event)
@@ -577,7 +588,8 @@ public final class WebSocket: Sendable {
       } catch {
         // Unknown errors
         Logger.trace(.webSocket, "Unknown error in listener", metadata: [
-          "error": "\(error)"
+          "error": "\(error)",
+          "id": "\(self.id)"
         ])
         self._listen(continuation)
       }
@@ -599,7 +611,8 @@ public final class WebSocket: Sendable {
         "event": "\(event)",
         "endpoint": "\(self.endpoint)",
         "reason": "no consumers",
-        "disconnect": "\(!disconnect)"
+        "disconnect": "\(!disconnect)",
+        "id": "\(self.id)"
       ])
       return disconnect
     }
@@ -616,7 +629,8 @@ public final class WebSocket: Sendable {
       Logger.trace(.webSocket, "Broadcast sent", metadata: [
         "endpoint": "\(self.endpoint)",
         "extra": "No outdated",
-        "event": "\(event)"
+        "event": "\(event)",
+        "id": "\(self.id)"
       ])
       return true
     }
@@ -628,7 +642,8 @@ public final class WebSocket: Sendable {
       "event": "\(event)",
       "endpoint": "\(self.endpoint)",
       "reason": "no consumers",
-      "disconnect": "\(!disconnect)"
+      "disconnect": "\(!disconnect)",
+      "id": "\(self.id)"
     ])
     return disconnect
   }
@@ -639,19 +654,21 @@ public final class WebSocket: Sendable {
   /// - Parameters:
   ///   - content: The raw data received from the server.
   ///   - context: The context of the received message, including metadata and opcode.
-  private func _process(content: Data?, context: NWConnection.ContentContext) -> Event? {
+  private func _process(content: Data?, context: NWConnection.ContentContext) throws -> Event? {
     guard let metadata = context.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata else { return nil }
     Logger.trace(.webSocket, "\(#function)", metadata: [
       "context": "\(context)",
       "metadata": "\(metadata)",
-      "opcode": "\(metadata.opcode)"
+      "opcode": "\(metadata.opcode)",
+      "id": "\(self.id)"
     ])
     
     switch metadata.opcode {
     case .binary:
       Logger.trace(.webSocket, "Incoming binary", metadata: [
         "endpoint": "\(self.endpoint)",
-        "size": "\(content?.count ?? .zero)"
+        "size": "\(content?.count ?? .zero)",
+        "id": "\(self.id)"
       ])
       return .binary(content ?? Data())
       
@@ -667,7 +684,8 @@ public final class WebSocket: Sendable {
       }
       Logger.trace(.webSocket, "Incoming text", metadata: [
         "endpoint": "\(self.endpoint)",
-        "content": "\(String(describing: string))"
+        "content": "\(String(describing: string))",
+        "id": "\(self.id)"
       ])
       return .text(string)
       
@@ -678,6 +696,7 @@ public final class WebSocket: Sendable {
       return .pong
       
     case .close:
+      guard self._intentionalDisconnect.value else { throw InternalError.disconnected }
       self._process(closeCode: metadata.closeCode)
       return nil
       
@@ -701,7 +720,8 @@ public final class WebSocket: Sendable {
         Logger.notice(.webSocket, "No connection", metadata: [
           "endpoint": "\(self.endpoint)",
           "action": "Waiting for connectivity",
-          "error": "\(error)"
+          "error": "\(error)",
+          "id": "\(self.id)"
         ])
         self._change(state: .pending, from: .connected)
         self._waitForConnectivityAndRestart()
@@ -710,7 +730,8 @@ public final class WebSocket: Sendable {
       case .ECONNRESET:
         Logger.notice(.webSocket, "No connection", metadata: [
           "endpoint": "\(self.endpoint)",
-          "error": "\(error)"
+          "error": "\(error)",
+          "id": "\(self.id)"
         ])
         let result = self._change(state: .pending, from: .connected)
         guard result.changed else { return nil }
@@ -719,7 +740,8 @@ public final class WebSocket: Sendable {
       case .ECANCELED, .ECONNABORTED:
         Logger.notice(.webSocket, "No connection", metadata: [
           "endpoint": "\(self.endpoint)",
-          "error": "\(error)"
+          "error": "\(error)",
+          "id": "\(self.id)"
         ])
         if self._intentionalDisconnect.value {
           self._process(closeCode: .protocolCode(.goingAway))
@@ -732,7 +754,8 @@ public final class WebSocket: Sendable {
       
     case .tls:
       Logger.critical(.webSocket, "TSL Error", metadata: [
-        "error": "\(error)"
+        "error": "\(error)",
+        "id": "\(self.id)"
       ])
       self._change(state: .pending, from: nil)
       return .error(error)
@@ -812,7 +835,8 @@ public final class WebSocket: Sendable {
       state = to
       Logger.trace(.webSocket, "Internal state changed", metadata: [
         "endpoint": "\(String(describing: self?.endpoint))",
-        "state": "\(state)"
+        "state": "\(state)",
+        "id": "\(String(describing: self?.id))"
       ])
       return (changed: true, oldState: oldState)
     }
@@ -842,7 +866,9 @@ public final class WebSocket: Sendable {
         }
         do {
           try await self?.connectivity.value.waitForConnectivity()
-          Logger.notice(.webSocket, "Connectivity reached")
+          Logger.notice(.webSocket, "Connectivity reached", metadata: [
+            "id": "\(String(describing: self?.id))"
+          ])
           // Wait a little bit extra
           try await Task.sleep(nanoseconds: 500_000_000)
           
@@ -853,7 +879,12 @@ public final class WebSocket: Sendable {
             self?._listen(stream)
           }
         } catch {
-          Logger.notice(.webSocket, "Connectivity task cancelled")
+          Logger.error(.webSocket, "Connectivity task error", metadata: [
+            "error": "\(error)"
+          ])
+          Logger.notice(.webSocket, "Connectivity task cancelled", metadata: [
+            "id": "\(String(describing: self?.id))"
+          ])
         }
       }
     }
@@ -869,7 +900,8 @@ public final class WebSocket: Sendable {
     guard self.consumers.value.isEmpty else { return false }
     Logger.trace(.webSocket, "Termination", metadata: [
       "endpoint": "\(self.endpoint)",
-      "reason": "no consumers"
+      "reason": "no consumers",
+      "id": "\(self.id)"
     ])
     let changed: Bool = self._intentionalDisconnect.write { value in
       guard !value else { return false }
@@ -888,7 +920,8 @@ public final class WebSocket: Sendable {
   private func _process(closeCode: NWProtocolWebSocket.CloseCode) {
     Logger.trace(.webSocket, "Process close", metadata: [
       "endpoint": "\(self.endpoint)",
-      "code": "\(closeCode)"
+      "code": "\(closeCode)",
+      "id": "\(self.id)"
     ])
     
     self.disconnectTask.write {[weak self] task in
@@ -901,7 +934,8 @@ public final class WebSocket: Sendable {
         } catch {
           Logger.trace(.webSocket, "Process close cancelled", metadata: [
             "endpoint": "\(self.endpoint)",
-            "code": "\(closeCode)"
+            "code": "\(closeCode)",
+            "id": "\(self.id)"
           ])
         }
       }
@@ -913,7 +947,9 @@ public final class WebSocket: Sendable {
   /// - Parameter closeCode: The `NWProtocolWebSocket.CloseCode` indicating the reason for disconnection.
   private func _disconnect(closeCode: NWProtocolWebSocket.CloseCode) async {
     Logger.trace(.webSocket, "Internal disconnect triggered", metadata: [
-      "endpoint": "\(self.endpoint)"
+      "endpoint": "\(self.endpoint)",
+      "id": "\(self.id)",
+      "closeCode": "\(closeCode)"
     ])
     do {
       let meta = NWProtocolWebSocket.Metadata(opcode: .close)
@@ -921,12 +957,14 @@ public final class WebSocket: Sendable {
       try await send(data: nil, opcode: .close, meta: meta)
       Logger.trace(.webSocket, "Close message sent", metadata: [
         "endpoint": "\(self.endpoint)",
-        "code": "\(closeCode)"
+        "code": "\(closeCode)",
+        "id": "\(self.id)"
       ])
     } catch {
       Logger.notice(.webSocket, "Close message failed", metadata: [
         "endpoint": "\(self.endpoint)",
-        "error": "\(error)"
+        "error": "\(error)",
+        "id": "\(self.id)"
       ])
     }
     self.connectivityTask.write { task in

@@ -20,7 +20,7 @@ public final class SocketNetworkClient: NetworkClient {
   
   private let _listenerTask = ThreadSafe<Task<Void, Never>?>(nil)
   
-  public init(url: URL, headers: Headers, dataBuilder :SocketDataBuilder) {
+  public init(url: URL, headers: Headers, dataBuilder: SocketDataBuilder) {
     self.url = url
     self.headers = headers
     self.dataBuilder = dataBuilder
@@ -261,82 +261,87 @@ extension SocketNetworkClient {
 
 
 extension SocketNetworkClient {
-  func connect() {
+  fileprivate func connect() {
     guard self.socket.state == .disconnected else { return }
-    Task(priority: .utility, operation: {[weak self] in
-      guard let self else { return }
-      for await event in self.socket.connect() {
-        Logger.debug(.socketNetworkClient, ">> Event: \(event)")
-        switch event {
-        case .connected:
-          Logger.debug(.socketNetworkClient, ">>> connected")
-          self.handleConnectionState(.connected)
-          
-        case .disconnected:
-          Logger.debug(.socketNetworkClient, ">>> disconnected")
-          self.handleConnectionState(.disconnected)
-          
-        case .viabilityDidChange(let isViable):
-          Logger.debug(.socketNetworkClient, ">>> viabilityChanged(\(isViable))")
+    _listenerTask.write {[weak self] task in
+      guard task == nil else { return }
+      task = Task(priority: .utility, operation: {[weak self] in
+        guard let self else { return }
+        for await event in self.socket.connect() {
+          Logger.debug(.socketNetworkClient, ">> Event: \(event)")
+          switch event {
+          case .connected:
+            Logger.debug(.socketNetworkClient, ">>> connected")
+            
+          case .disconnected:
+            Logger.debug(.socketNetworkClient, ">>> disconnected")
+            self.handleConnectionState(.disconnected)
+            
+          case .viabilityDidChange(let isViable):
+            Logger.debug(.socketNetworkClient, ">>> viabilityChanged(\(isViable))")
+            if isViable {
+              self.handleConnectionState(.connected)
+            }
 
-        case .ping:
-          break
-          
-        case .pong:
-          break
-          
-        case .text(let text):
-          guard let text else { return }
-          Logger.debug(.socketNetworkClient,
-            """
-            =======New websocket message:========
-             Message:
-              \(text)
-            =====================================
-            \u{2028}
-            """
-          )
-          do {
-            let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
-            if let id = id {
-              await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
-            } else if let subscriptionId = subscriptionId {
-              await self.requestsHandler.send(data: response, to: subscriptionId)
+          case .ping:
+            break
+            
+          case .pong:
+            break
+            
+          case .text(let text):
+            guard let text else { return }
+            Logger.debug(.socketNetworkClient,
+              """
+              =======New websocket message:========
+               Message:
+                \(text)
+              =====================================
+              \u{2028}
+              """
+            )
+            do {
+              let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
+              if let id = id {
+                await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
+              } else if let subscriptionId = subscriptionId {
+                await self.requestsHandler.send(data: response, to: subscriptionId)
+              }
+            } catch {
+              Logger.debug(.socketNetworkClient, error)
             }
-          } catch {
-            Logger.debug(.socketNetworkClient, error)
-          }
-        case .binary(let data):
-          guard let data,
-                let text = String(data: data, encoding: .utf8) else { return }
-          Logger.debug(.socketNetworkClient,
-            """
-            =======New websocket message:========
-             Message:
-              \(text)
-            =====================================
-            \u{2028}
-            """
-          )
-          do {
-            let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
-            if let id = id {
-              await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
-            } else if let subscriptionId = subscriptionId {
-              await self.requestsHandler.send(data: response, to: subscriptionId)
+          case .binary(let data):
+            guard let data,
+                  let text = String(data: data, encoding: .utf8) else { return }
+            Logger.debug(.socketNetworkClient,
+              """
+              =======New websocket message:========
+               Message:
+                \(text)
+              =====================================
+              \u{2028}
+              """
+            )
+            do {
+              let (id, subscriptionId, response) = try self.dataBuilder.unwrap(response: text)
+              if let id = id {
+                await self.requestsHandler.send(data: response, subscriptionId: subscriptionId, to: id)
+              } else if let subscriptionId = subscriptionId {
+                await self.requestsHandler.send(data: response, to: subscriptionId)
+              }
+            } catch {
+              Logger.debug(.socketNetworkClient, error)
             }
-          } catch {
-            Logger.debug(.socketNetworkClient, error)
+            
+          case .error(let error):
+            Logger.debug(.socketNetworkClient, ">>> error: \(error.localizedDescription)")
+            
+          case .connectionError(let error):
+            Logger.debug(.socketNetworkClient, ">>> error: \(error.localizedDescription)")
           }
-          
-        case .error(let error):
-          Logger.debug(.socketNetworkClient, ">>> error: \(error.localizedDescription)")
-          
-        case .connectionError(let error):
-          Logger.debug(.socketNetworkClient, ">>> error: \(error.localizedDescription)")
         }
-      }
-    })
+      })
+    }
   }
   
   private func handleConnectionState(_ state: ConnectionState) {
