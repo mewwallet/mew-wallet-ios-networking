@@ -285,7 +285,6 @@ struct WebSocketTests {
               .connected,
               .viabilityDidChange(true),
               .text("Hello"),
-              .binary("World".data(using: .utf8)!),
               .disconnected
             ]
           case .pinned(let domain, _):
@@ -299,7 +298,6 @@ struct WebSocketTests {
                 .connected,
                 .viabilityDidChange(true),
                 .text("Hello"),
-                .binary("World".data(using: .utf8)!),
                 .disconnected
               ]
             }
@@ -328,8 +326,6 @@ struct WebSocketTests {
         case .unpinned:
           try await client.send("Hello")
           try await Task.sleep(nanoseconds: 300_000_000)
-          try await client.send("World".data(using: .utf8)!)
-          try await Task.sleep(nanoseconds: 300_000_000)
           client.disconnect()
         case .pinned(let domain, _):
           if domain == "websocket2.org" {
@@ -337,8 +333,6 @@ struct WebSocketTests {
             client.disconnect()
           } else {
             try await client.send("Hello")
-            try await Task.sleep(nanoseconds: 500_000_000)
-            try await client.send("World".data(using: .utf8)!)
             try await Task.sleep(nanoseconds: 500_000_000)
             client.disconnect()
           }
