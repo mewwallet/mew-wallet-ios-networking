@@ -8,7 +8,7 @@
 import Foundation
 import Network
 import os
-import wcpm_logger
+import mew_wallet_ios_logger
 
 extension MockWebSocketServer {
   final class Connection {
