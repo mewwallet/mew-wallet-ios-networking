@@ -726,6 +726,21 @@ public final class WebSocket: Sendable {
         self._change(state: .pending, from: .connected)
         self._waitForConnectivityAndRestart()
         throw InternalError.onHold
+        
+      case .ECONNABORTED:
+        Logger.notice(.webSocket, "No connection", metadata: [
+          "endpoint": "\(self.endpoint)",
+          "error": "\(error)",
+          "id": "\(self.id)"
+        ])
+        if self._intentionalDisconnect.value {
+          self._process(closeCode: .protocolCode(.goingAway))
+          throw InternalError.disconnected
+        } else {
+          self._change(state: .pending, from: .connected)
+          self._waitForConnectivityAndRestart()
+          throw InternalError.onHold
+        }
       
       case .ECONNRESET:
         Logger.notice(.webSocket, "No connection", metadata: [
@@ -737,7 +752,7 @@ public final class WebSocket: Sendable {
         guard result.changed else { return nil }
         return .disconnected
         
-      case .ECANCELED, .ECONNABORTED:
+      case .ECANCELED:
         Logger.notice(.webSocket, "No connection", metadata: [
           "endpoint": "\(self.endpoint)",
           "error": "\(error)",

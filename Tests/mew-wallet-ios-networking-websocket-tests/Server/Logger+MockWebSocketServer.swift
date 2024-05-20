@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import wcpm_logger
+import mew_wallet_ios_logger
 import os
 
 extension Logger.System {
