@@ -8,7 +8,7 @@
 import Foundation
 import Network
 import os
-import wcpm_logger
+import mew_wallet_ios_logger
 
 @MainActor final class MockWebSocketServer {
   enum Error: Swift.Error {
