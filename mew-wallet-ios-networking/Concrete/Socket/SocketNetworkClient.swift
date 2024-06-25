@@ -23,6 +23,16 @@ public final class SocketNetworkClient: NetworkClient {
   public init(url: URL, headers: Headers, dataBuilder: SocketDataBuilder) {
     self.url = url
     self.headers = headers
+    Logger.debug(.socketNetworkClient,
+      """
+
+      ==========New socket client:==========
+      URL: \(url)
+      Headers: \(headers)
+      =====================================
+      """
+    )
+    
     self.dataBuilder = dataBuilder
     do {
       let configuration: WebSocket.Configuration
