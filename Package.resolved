@@ -1,13 +1,13 @@
 {
-  "originHash" : "25f622423e80d7d3a9b44d88239aa83451129377fc111449677922a80f4bca36",
+  "originHash" : "067f2ad9e7764a9355fca05c9f77d00fb6a88158d52c1bea5f7a67ad1ad89fda",
   "pins" : [
     {
       "identity" : "mew-wallet-ios-extensions",
       "kind" : "remoteSourceControl",
       "location" : "git@github.com:mewwallet/mew-wallet-ios-extensions.git",
       "state" : {
-        "revision" : "8a3039d935ae3754bb3d1ed430ac14780911a309",
-        "version" : "1.1.0"
+        "revision" : "5c109db85d4d95a58e7912b5e3d03777e71d0077",
+        "version" : "2.0.0"
       }
     },
     {
@@ -53,24 +53,6 @@
       "state" : {
         "revision" : "654ea6e32b9802c45468c4c743ed507c36a775c2",
         "version" : "1.0.2"
-      }
-    },
-    {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-syntax.git",
-      "state" : {
-        "revision" : "64889f0c732f210a935a0ad7cda38f77f876262d",
-        "version" : "509.1.1"
-      }
-    },
-    {
-      "identity" : "swift-testing",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-testing.git",
-      "state" : {
-        "revision" : "3ed2f90058afe4437369aee4880890e7fa65d1ec",
-        "version" : "0.5.1"
       }
     }
   ],

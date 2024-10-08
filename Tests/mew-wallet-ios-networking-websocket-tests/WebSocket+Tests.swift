@@ -267,7 +267,7 @@ struct WebSocketTests {
     }
   }
   
-  @Test("TLS", .timeLimit(.seconds(10)), .tags(.general), .tags(.tls), arguments: [Configuration.shortDelay, .tlsUnpinnedShortDelay, .tlsAutoPinnedShortDelay, .tlsUnpinnedShortDelay, .tlsBadPinnedShortDelay], [(URL(string: "wss://echo.websocket.org")!, UInt16(0))])
+  @Test("TLS", .timeLimit(.minutes(1)), .tags(.general), .tags(.tls), arguments: [Configuration.shortDelay, .tlsUnpinnedShortDelay, .tlsAutoPinnedShortDelay, .tlsUnpinnedShortDelay, .tlsBadPinnedShortDelay], [(URL(string: "wss://echo.websocket.org")!, UInt16(0))])
   func tls(configuration: Configuration, _ endpoint: (url: URL, port: UInt16)) async throws {
     try await withThrowingTaskGroup(of: Void.self) { group in
       let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))

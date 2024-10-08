@@ -18,10 +18,9 @@ let package = Package(
       targets: ["mew-wallet-ios-networking-websocket"])
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-testing.git", from: "0.5.1"),
-    .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "1.1.0")),
+    .package(url: "git@github.com:mewwallet/mew-wallet-ios-extensions.git", .upToNextMajor(from: "2.0.0")),
     .package(url: "git@github.com:mewwallet/mew-wallet-ios-logger.git", .upToNextMajor(from: "2.0.1")),
-    .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0")
+    .package(url: "https://github.com/apple/swift-async-algorithms.git", from: "1.0.0")
   ],
   targets: [
     .target(
@@ -43,7 +42,6 @@ let package = Package(
       name: "mew-wallet-ios-networking-tests",
       dependencies: [
         "mew-wallet-ios-networking",
-        .product(name: "Testing", package: "swift-testing")
       ],
       path: "Tests/mew-wallet-ios-networking-tests"
     ),
@@ -67,7 +65,6 @@ let package = Package(
       name: "mew-wallet-ios-networking-websocket-tests",
       dependencies: [
         "mew-wallet-ios-networking-websocket",
-        .product(name: "Testing", package: "swift-testing"),
         .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
       ],
       path: "Tests/mew-wallet-ios-networking-websocket-tests"
