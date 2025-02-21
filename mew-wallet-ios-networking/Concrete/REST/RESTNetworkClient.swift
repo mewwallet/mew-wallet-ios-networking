@@ -42,6 +42,7 @@ public final class RESTClient: NetworkClient {
         =====Network task did finished:=====
          Code: \((response as? HTTPURLResponse)?.statusCode ?? -1)
          Request: \(request.httpMethod ?? "") \(request.url?.debugDescription ?? "")
+         Headers: \((response as? HTTPURLResponse)?.allHeaderFields.debugDescription ?? "[:]")
          Response: \(data != nil ? (String(data: data!, encoding: .utf8) ?? "Can't convert response to string") : "None")
         ====================================
         """)
@@ -84,6 +85,7 @@ public final class RESTClient: NetworkClient {
         
         =====Network task did finished:=====
          Request: \(request.httpMethod ?? "") \(request.url?.debugDescription ?? "")
+         Headers: \((response as? HTTPURLResponse)?.allHeaderFields.debugDescription ?? "[:]")
          Response: \(data != nil ? (String(data: data!, encoding: .utf8) ?? "Can't convert response to string") : "None")
         ====================================
         """)
