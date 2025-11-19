@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension WebSocket {
+extension MW.WebSocket {
   public enum State: Sendable {
     case disconnected
     case pending

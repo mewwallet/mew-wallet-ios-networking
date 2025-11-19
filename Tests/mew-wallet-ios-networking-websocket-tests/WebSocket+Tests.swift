@@ -16,15 +16,15 @@ struct WebSocketTests {
     case tlsBadPinnedShortDelay
     case tlsPinnedShortDelay
     
-    var configuration: WebSocket.Configuration {
+    var configuration: MW.WebSocket.Configuration {
       switch self {
-      case .shortDelay:                 return WebSocket.Configuration(tls: .disabled, reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
-      case .noPingShortDelay:           return WebSocket.Configuration(tls: .disabled, reconnectDelay: 1.0, autoReplyPing: false, pingInterval: 1.0)
+      case .shortDelay:                 return MW.WebSocket.Configuration(tls: .disabled, reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
+      case .noPingShortDelay:           return MW.WebSocket.Configuration(tls: .disabled, reconnectDelay: 1.0, autoReplyPing: false, pingInterval: 1.0)
         
-      case .tlsAutoPinnedShortDelay:    return WebSocket.Configuration(tls: .pinned(domain: nil, allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
-      case .tlsUnpinnedShortDelay:      return WebSocket.Configuration(tls: .unpinned, reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
-      case .tlsBadPinnedShortDelay:     return WebSocket.Configuration(tls: .pinned(domain: "websocket2.org", allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
-      case .tlsPinnedShortDelay:        return WebSocket.Configuration(tls: .pinned(domain: "websocket.org", allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
+      case .tlsAutoPinnedShortDelay:    return MW.WebSocket.Configuration(tls: .pinned(domain: nil, allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
+      case .tlsUnpinnedShortDelay:      return MW.WebSocket.Configuration(tls: .unpinned, reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
+      case .tlsBadPinnedShortDelay:     return MW.WebSocket.Configuration(tls: .pinned(domain: "websocket2.org", allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
+      case .tlsPinnedShortDelay:        return MW.WebSocket.Configuration(tls: .pinned(domain: "websocket.org", allowSelfSigned: false), reconnectDelay: 1.0, autoReplyPing: true, pingInterval: 1.0)
       }
     }
   }
@@ -36,11 +36,11 @@ struct WebSocketTests {
   @Test("Wait initial connect", .tags(.general), arguments: [Configuration.shortDelay], [(URL(string: "ws://localhost:8085")!, UInt16(8085))])
   func waitInitialConnect(configuration: Configuration, _ endpoint: (url: URL, port: UInt16)) async throws {
     try await withThrowingTaskGroup(of: Void.self) { group in
-      let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))
+      let client = try MW.WebSocket(url: endpoint.url, configuration: configuration.configuration)
       group.addTask {
         #expect(client.state == .disconnected)
-        let expected: [WebSocket.Event] = []
-        var events: [WebSocket.Event] = []
+        let expected: [MW.WebSocket.Event] = []
+        var events: [MW.WebSocket.Event] = []
         for await event in client.connect() {
           events.append(event)
         }
@@ -60,21 +60,21 @@ struct WebSocketTests {
     let server: MockWebSocketServer = try await MockWebSocketServer(port: endpoint.port)
     
     try await withThrowingTaskGroup(of: Void.self) { group in
-      let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))
+      let client = try MW.WebSocket(url: endpoint.url, configuration: configuration.configuration)
       group.addTask {
         try await Task.sleep(nanoseconds: 1_000_000_000)
         #expect(client.state == .disconnected)
         var hadPing = false
         var hadPong = false
         
-        let expected: [WebSocket.Event] = [
+        let expected: [MW.WebSocket.Event] = [
           .connected,
           .viabilityDidChange(true),
           .text("Hello world"),
           .binary("Hello world".data(using: .utf8)!),
           .disconnected
         ]
-        var events: [WebSocket.Event] = []
+        var events: [MW.WebSocket.Event] = []
         for await event in client.connect() {
           if event == .pong {
             hadPong = true
@@ -95,7 +95,9 @@ struct WebSocketTests {
       }
       
       group.addTask {
-        try #require(try await server.run())
+        await #expect(throws: Never.self) {
+          try await server.run()
+        }
         #expect(await server.pingReceived == false)
         #expect(await server.pongReceived == false)
         try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -117,21 +119,21 @@ struct WebSocketTests {
     let server: MockWebSocketServer = try await MockWebSocketServer(port: endpoint.port)
     
     try await withThrowingTaskGroup(of: Void.self) { group in
-      let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))
+      let client = try MW.WebSocket(url: endpoint.url, configuration: configuration.configuration)
       group.addTask {
         try await Task.sleep(nanoseconds: 1_000_000_000)
         #expect(client.state == .disconnected)
         var hadPing = false
         var hadPong = false
         
-        let expected: [WebSocket.Event] = [
+        let expected: [MW.WebSocket.Event] = [
           .connected,
           .viabilityDidChange(true),
           .text("Hello world"),
           .binary("Hello world".data(using: .utf8)!),
           .disconnected
         ]
-        var events: [WebSocket.Event] = []
+        var events: [MW.WebSocket.Event] = []
         for await event in client.connect() {
           if event == .pong {
             hadPong = true
@@ -152,7 +154,9 @@ struct WebSocketTests {
       }
       
       group.addTask {
-        try #require(try await server.run())
+        await #expect(throws: Never.self) {
+          try await server.run()
+        }
         #expect(await server.pingReceived == false)
         #expect(await server.pongReceived == false)
         try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -174,10 +178,12 @@ struct WebSocketTests {
     let server: MockWebSocketServer = try await MockWebSocketServer(port: endpoint.port)
     
     try await withThrowingTaskGroup(of: Void.self) { group in
-      let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))
+      let client = try MW.WebSocket(url: endpoint.url, configuration: configuration.configuration)
       
       group.addTask {
-        try #require(try await server.run())
+        await #expect(throws: Never.self) {
+          try await server.run()
+        }
         #expect(await server.pingReceived == false)
         #expect(await server.pongReceived == false)
         try await Task.sleep(nanoseconds: 1_500_000_000)
@@ -203,7 +209,7 @@ struct WebSocketTests {
           var hadPong = false
           var hadPing = false
           
-          let expected: [WebSocket.Event] = [
+          let expected: [MW.WebSocket.Event] = [
             .connected,
             .viabilityDidChange(true),
             .text("Hello world"),
@@ -214,7 +220,7 @@ struct WebSocketTests {
             .disconnected
           ]
           
-          var events: [WebSocket.Event] = []
+          var events: [MW.WebSocket.Event] = []
           for await event in client.connect() {
             if event == .viabilityDidChange(true) {
               continuation.resume()
@@ -241,11 +247,11 @@ struct WebSocketTests {
         #expect(client.state == .connected)
         var hadPing = false
         var hadPong = false
-        let expected: [WebSocket.Event] = [
+        let expected: [MW.WebSocket.Event] = [
           .text("Hello world"),
           .binary("Hello world".data(using: .utf8)!),
         ]
-        var events: [WebSocket.Event] = []
+        var events: [MW.WebSocket.Event] = []
         // +ping-pong
         for await event in client.connect() {
           if event == .text("Break client 2") {
@@ -267,15 +273,16 @@ struct WebSocketTests {
     }
   }
   
+  @available(iOS 16.0, macOS 14.0, *)
   @Test("TLS", .timeLimit(.minutes(1)), .tags(.general), .tags(.tls), arguments: [Configuration.shortDelay, .tlsUnpinnedShortDelay, .tlsAutoPinnedShortDelay, .tlsUnpinnedShortDelay, .tlsBadPinnedShortDelay], [(URL(string: "wss://echo.websocket.org")!, UInt16(0))])
   func tls(configuration: Configuration, _ endpoint: (url: URL, port: UInt16)) async throws {
     try await withThrowingTaskGroup(of: Void.self) { group in
-      let client = try #require(try WebSocket(url: endpoint.url, configuration: configuration.configuration))
+      let client = try MW.WebSocket(url: endpoint.url, configuration: configuration.configuration)
       
       await withCheckedContinuation { continuation in
         group.addTask {
           #expect(client.state == .disconnected)
-          let expected: [WebSocket.Event]
+          let expected: [MW.WebSocket.Event]
           switch configuration.configuration.tls {
           case .disabled: // Forced not secure connection
             expected = []
@@ -303,7 +310,7 @@ struct WebSocketTests {
             }
           }
           
-          var events: [WebSocket.Event] = []
+          var events: [MW.WebSocket.Event] = []
           for await event in client.connect() {
             if event == .viabilityDidChange(true) {
               continuation.resume()
