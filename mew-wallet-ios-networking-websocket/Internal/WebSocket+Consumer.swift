@@ -7,11 +7,11 @@
 
 import Foundation
 
-extension WebSocket {
+extension MW.WebSocket {
   internal final class Consumer: Sendable, Equatable {
     let uuid: UUID
     let continuation: AsyncStream<Event>.Continuation
-    static func == (lhs: WebSocket.Consumer, rhs: WebSocket.Consumer) -> Bool { lhs.uuid == rhs.uuid }
+    static func == (lhs: MW.WebSocket.Consumer, rhs: MW.WebSocket.Consumer) -> Bool { lhs.uuid == rhs.uuid }
     
     init(continuation: AsyncStream<Event>.Continuation, termination: (@Sendable (Consumer, AsyncStream<Event>.Continuation.Termination) -> Void)?) {
       let uuid = UUID()

@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension WebSocket {
+extension MW.WebSocket {
   enum InternalError: Swift.Error, Sendable {
     case onHold
     case disconnected

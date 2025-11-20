@@ -8,7 +8,7 @@
 import Foundation
 import Network
 
-extension WebSocket {
+extension MW.WebSocket {
   public enum Event: Sendable, Equatable {
     case connected
     case disconnected

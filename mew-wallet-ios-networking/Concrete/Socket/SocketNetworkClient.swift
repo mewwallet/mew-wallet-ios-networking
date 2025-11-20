@@ -16,7 +16,7 @@ public final class SocketNetworkClient: NetworkClient {
   private let dataBuilder: SocketDataBuilder
   private let requestsHandler: SocketRequestsHandler = .init()
     
-  private let socket: WebSocket
+  private let socket: MW.WebSocket
   
   private let _listenerTask = ThreadSafe<Task<Void, Never>?>(nil)
   
@@ -35,13 +35,13 @@ public final class SocketNetworkClient: NetworkClient {
     
     self.dataBuilder = dataBuilder
     do {
-      let configuration: WebSocket.Configuration
+      let configuration: MW.WebSocket.Configuration
       if url.scheme == "ws" || url.scheme == "http" {
         configuration = .defaultNoPinning
       } else {
         configuration = .default
       }
-      self.socket = try WebSocket(url: self.url, headers: self.headers.array, configuration: configuration)
+      self.socket = try MW.WebSocket(url: self.url, headers: self.headers.array, configuration: configuration)
       self.connect()
     } catch {
       fatalError()

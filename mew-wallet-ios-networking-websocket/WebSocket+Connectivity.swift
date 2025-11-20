@@ -11,7 +11,7 @@ import os
 import mew_wallet_ios_extensions
 import mew_wallet_ios_logger
 
-extension WebSocket.Connectivity {
+extension MW.WebSocket.Connectivity {
   enum Error: Swift.Error {
     case cancelled
     case failed
@@ -20,14 +20,14 @@ extension WebSocket.Connectivity {
   }
 }
 
-extension WebSocket.Connectivity {
+extension MW.WebSocket.Connectivity {
   enum State {
     case idle
     case waiting
   }
 }
 
-extension WebSocket {
+extension MW.WebSocket {
   /// The WebSocket.Connectivity class is an extension of the WebSocket class, focusing on the management of WebSocket connection states and monitoring network connectivity changes. It is built to be thread-safe and utilizes Apple's Network framework (NWConnection) for network tasks.
   public final class Connectivity: Sendable {
     private let _state = ThreadSafe<State>(.idle)
@@ -37,11 +37,11 @@ extension WebSocket {
     }
     
     /// The WebSocket configuration
-    private let configuration: WebSocket.Configuration
+    private let configuration: MW.WebSocket.Configuration
     
     /// A ThreadSafe wrapper around an optional NWConnection, used to monitor the WebSocket connection.
     private let monitor = ThreadSafe<NWConnection?>(nil)
-    private let pinner: WebSocket.TLSPinner?
+    private let pinner: MW.WebSocket.TLSPinner?
     /// A DispatchQueue used for executing network monitoring tasks.
     private let monitorQueue: DispatchQueue = .init(label: "mew-wallet-ios-networking-websocket.connectivity", qos: .utility)
     
@@ -61,7 +61,7 @@ extension WebSocket {
     ///   - headers: Extra headers for connection
     ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    public convenience init(url: URL, headers: [(name: String, value: String)], options: NWProtocolWebSocket.Options? = nil, configuration: WebSocket.Configuration = .default) throws {
+    public convenience init(url: URL, headers: [(name: String, value: String)], options: NWProtocolWebSocket.Options? = nil, configuration: MW.WebSocket.Configuration = .default) throws {
       // Options
       let options = NWProtocolWebSocket.Options()
       if !headers.isEmpty {
@@ -80,7 +80,7 @@ extension WebSocket {
     ///   - url: The URL of the WebSocket connection to monitor.
     ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    public convenience init(url: URL, options: [NWProtocolOptions] = [], configuration: WebSocket.Configuration = .default) throws {
+    public convenience init(url: URL, options: [NWProtocolOptions] = [], configuration: MW.WebSocket.Configuration = .default) throws {
       try self.init(endpoint: .url(url), options: options, configuration: configuration)
     }
     
@@ -89,7 +89,7 @@ extension WebSocket {
     ///   - endpoint: The `NWEndpoint` of the WebSocket connection to monitor.
     ///   - options: `WebSocket` protocol options
     ///   - configuration: `WebSocket.Configuration` with connection settings
-    public init(endpoint: NWEndpoint, options: [NWProtocolOptions] = [], configuration: WebSocket.Configuration = .default) throws {
+    public init(endpoint: NWEndpoint, options: [NWProtocolOptions] = [], configuration: MW.WebSocket.Configuration = .default) throws {
       // TLS Protocol
       var protocolTLSOptions = (options.first(where: { $0 is NWProtocolTLS.Options }) as? NWProtocolTLS.Options)
       switch configuration.tls {
@@ -191,7 +191,7 @@ extension WebSocket {
       Logger.debug(.connectivity, "Cancelled", metadata: [
         "endpoint": "\(endpoint)"
       ])
-      self.stop(with: .failure(WebSocket.Connectivity.Error.cancelled))
+      self.stop(with: .failure(MW.WebSocket.Connectivity.Error.cancelled))
     }
     
     // MARK: - State Handler

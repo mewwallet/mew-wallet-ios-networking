@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension WebSocket {
+extension MW.WebSocket {
   public enum ConnectionError: Swift.Error, Sendable {
     case notReachable
   }
