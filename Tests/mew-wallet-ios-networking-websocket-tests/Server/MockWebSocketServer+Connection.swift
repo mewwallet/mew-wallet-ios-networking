@@ -11,7 +11,7 @@ import os
 import mew_wallet_ios_logger
 
 extension MockWebSocketServer {
-  final class Connection {
+  final class Connection: @unchecked Sendable {
     enum Event {
       case text(String?)
       case binary(Data?)

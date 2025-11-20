@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension WebSocket {
+extension MW.WebSocket {
   public struct Configuration: Sendable {
     public enum TLS: Sendable {
       case disabled
@@ -23,14 +23,14 @@ extension WebSocket {
     /// Interval between ping messages
     public let pingInterval: TimeInterval?
     
-    public static let `default` = WebSocket.Configuration(
+    public static let `default` = MW.WebSocket.Configuration(
       tls: .pinned(domain: nil, allowSelfSigned: false),
       reconnectDelay: 5.0,
       autoReplyPing: true,
       pingInterval: 20.0
     )
     
-    public static let defaultNoPinning = WebSocket.Configuration(
+    public static let defaultNoPinning = MW.WebSocket.Configuration(
       tls: .disabled,
       reconnectDelay: 5.0,
       autoReplyPing: true,

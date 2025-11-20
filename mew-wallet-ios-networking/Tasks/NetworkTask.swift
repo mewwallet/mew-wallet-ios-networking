@@ -25,9 +25,10 @@ public final class NetworkTask: Sendable {
     init(code: Int, response: String) {
       switch code {
       case NetworkResponseCode.badRequest.code:                 self = .code_400_badRequest(response: response)
-      case NetworkResponseCode.conflict.code:                   self = .code_409_conflict(response: response)
+      case NetworkResponseCode.forbidden.code:                  self = .code_403_forbidden(response: response)
       case NetworkResponseCode.notFound.code:                   self = .code_404_notFound(response: response)
       case NetworkResponseCode.notAcceptable.code:              self = .code_406_notAcceptable(response: response)
+      case NetworkResponseCode.conflict.code:                   self = .code_409_conflict(response: response)
       case NetworkResponseCode.failedDependency.code:           self = .code_424_failedDependency(response: response)
       case NetworkResponseCode.aws_tooManyRequests.code:        self = .code_429_awsTooManyRequests(response: response)
       default:                                                  self = .badCode(code: code, response: response)

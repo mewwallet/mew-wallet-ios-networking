@@ -10,7 +10,7 @@ import Network
 import os
 import mew_wallet_ios_logger
 
-extension WebSocket {
+extension MW.WebSocket {
   /// `TLSPinner` is an internal final class within the `WebSocket` extension, designed to facilitate TLS (Transport Layer Security) pinning for WebSocket connections.
   ///
   /// This class aims to enhance security by verifying the server's SSL certificate against known certificates or public keys, preventing man-in-the-middle (MITM) attacks.
