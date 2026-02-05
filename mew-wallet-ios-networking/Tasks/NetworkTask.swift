@@ -160,7 +160,7 @@ public final class NetworkTask: Sendable {
   static private func checkForError<E: Sendable & Equatable>(networkResponse: NetworkResponse, config: NetworkRequestConfig, errorType: E.Type) async throws(TypedError<E>) {
     guard !networkResponse.statusCode.isSuccess else { return }
     
-    guard let body = networkResponse.data as? Data else{
+    guard let body = networkResponse.data as? Data else {
       throw TypedError(code: networkResponse.statusCode.code, response: nil)
     }
     
