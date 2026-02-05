@@ -14,7 +14,7 @@ final class TaskResponseMapping: Sendable {
     self.mapper = mapper
   }
   
-  func process(headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
-    return try await mapper.map(headers: headers, response: response)
+  func process(responseCode: NetworkResponseCode, headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
+    return try await mapper.map(responseCode: responseCode, headers: headers, response: response)
   }
 }

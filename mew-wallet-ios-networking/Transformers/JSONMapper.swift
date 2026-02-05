@@ -13,7 +13,7 @@ public final class JSONMapper<T: Decodable & Sendable>: NetworkResponseMapper {
   public init() {
   }  
   
-  public func map(headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
+  public func map(responseCode: NetworkResponseCode, headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
     guard let data = response as? Data else { throw MapperBase.Error.badInput }
     return try decoder.decode(T.self, from: data)
   }

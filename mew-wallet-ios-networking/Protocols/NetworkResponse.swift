@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum NetworkResponseCode: Sendable {
+public enum NetworkResponseCode: Sendable, Equatable {
   case success                // 200
   case accepted               // 202
   case badRequest             // 400
