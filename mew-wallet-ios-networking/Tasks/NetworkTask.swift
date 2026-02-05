@@ -164,10 +164,20 @@ public final class NetworkTask: Sendable {
       throw TypedError(code: networkResponse.statusCode.code, response: nil)
     }
     
-    if E.self == String.self {
+    switch errorType {
+    case is String.Type:
       let errorString = String(data: body, encoding: .utf8) ?? "Unknown error"
       throw TypedError(code: networkResponse.statusCode.code, response: errorString as? E)
-    } else {
+      
+    case is Never.Type:
+      /// This will loop the call to `String.Type` and keep backward compatibility.
+      do {
+        try await self.checkForError(networkResponse: networkResponse, config: config, errorType: String.self)
+      } catch {
+        throw TypedError.underlying(error)
+      }
+      
+    default:
       /// Mapping
       let result: E
       switch config.mapping {

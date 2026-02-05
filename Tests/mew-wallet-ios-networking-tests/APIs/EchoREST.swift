@@ -48,9 +48,9 @@ enum EchoREST: APINetworkPath {
   var mapper: NetworkResponseMapper? {
     switch self {
     case .getRequest:
-      return JSONMapper<EchoResponse>()
+      return JSONMapper<EchoResponse, Never>()
     case .postRequest:
-      return JSONMapper<EchoResponse>()
+      return JSONMapper<EchoResponse, Never>()
     }
   }
   
