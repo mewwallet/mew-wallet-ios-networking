@@ -16,7 +16,7 @@ public final class MapperBase: NetworkResponseMapper {
     }
   }
   
-  public typealias Context = @Sendable (Headers?, Data) async throws -> (any Sendable)?
+  public typealias Context = @Sendable (/*httpCode: */NetworkResponseCode, /*headers: */Headers?, /*response: */Data) async throws -> (any Sendable)?
   
   let context: Context
   
@@ -24,8 +24,8 @@ public final class MapperBase: NetworkResponseMapper {
     self.context = context
   }
   
-  public func map(headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
+  public func map(responseCode: NetworkResponseCode, headers: Headers?, response: any Sendable) async throws -> (any Sendable)? {
     guard let data = response as? Data else { throw Error.badInput }
-    return try await self.context(headers, data)
+    return try await self.context(responseCode, headers, data)
   }
 }
