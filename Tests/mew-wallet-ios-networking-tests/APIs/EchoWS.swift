@@ -34,9 +34,9 @@ enum EchoWS: APINetworkPath {
   var mapper: NetworkResponseMapper? {
     switch self {
     case .request:
-      return JSONMapper<EchoBody>()
+      return JSONMapper<EchoBody, Never>()
     case .subRequest:
-      return JSONMapper<EchoBody>()
+      return JSONMapper<EchoBody, Never>()
     }
   }
   
