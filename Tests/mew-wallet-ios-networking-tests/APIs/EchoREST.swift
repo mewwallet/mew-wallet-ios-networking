@@ -72,7 +72,17 @@ enum EchoREST: APINetworkPath {
       config = config.mapping(.custom(mapper))
     }
     return APITask<R>(path: self, provider: provider) {[config = config] in
-      try await NetworkTask.run(config: config)
+      do {
+        let result: Result<R, NetworkTask.TypedError<String>> = await NetworkTask.runResult(config: config)
+        return try result.get()
+      } catch {
+        switch error {
+        case NetworkTask.TypedError<String>.underlying(let error):
+          throw error
+        default:
+          throw error
+        }
+      }
     }
   }
   

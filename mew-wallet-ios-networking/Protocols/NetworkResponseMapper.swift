@@ -8,5 +8,5 @@
 import Foundation
 
 public protocol NetworkResponseMapper: Sendable {
-  func map(headers: Headers?, response: any Sendable) async throws -> (any Sendable)?
+  func map(responseCode: NetworkResponseCode, headers: Headers?, response: any Sendable) async throws -> (any Sendable)?
 }
