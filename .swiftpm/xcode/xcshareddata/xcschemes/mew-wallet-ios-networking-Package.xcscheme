@@ -115,12 +115,12 @@
       allowLocationSimulation = "YES">
       <AdditionalOptions>
          <AdditionalOption
-            key = "MallocStackLogging"
+            key = "PrefersMallocStackLoggingLite"
             value = ""
             isEnabled = "YES">
          </AdditionalOption>
          <AdditionalOption
-            key = "PrefersMallocStackLoggingLite"
+            key = "MallocStackLogging"
             value = ""
             isEnabled = "YES">
          </AdditionalOption>
