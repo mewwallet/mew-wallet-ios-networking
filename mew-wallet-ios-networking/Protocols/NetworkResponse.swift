@@ -15,6 +15,7 @@ public enum NetworkResponseCode: Sendable, Equatable {
   case notFound               // 404
   case notAcceptable          // 406
   case conflict               // 409
+  case locked                 // 423
   case failedDependency       // 424
   case upgradeRequired        // 426
   case aws_tooManyRequests    // 429
@@ -29,6 +30,7 @@ public enum NetworkResponseCode: Sendable, Equatable {
     case 404:   self = .notFound
     case 406:   self = .notAcceptable
     case 409:   self = .conflict
+    case 423:   self = .locked
     case 424:   self = .failedDependency
     case 426:   self = .upgradeRequired
     case 429:   self = .aws_tooManyRequests
@@ -45,6 +47,7 @@ public enum NetworkResponseCode: Sendable, Equatable {
     case .notFound:             return 404
     case .notAcceptable:        return 406
     case .conflict:             return 409
+    case .locked:               return 423
     case .failedDependency:     return 424
     case .upgradeRequired:      return 426
     case .aws_tooManyRequests:  return 429

@@ -19,6 +19,7 @@ public final class NetworkTask: Sendable {
     case code_404_notFound(response: T?)
     case code_406_notAcceptable(response: T?)
     case code_409_conflict(response: T?)
+    case code_423_locked(response: T?)
     case code_424_failedDependency(response: T?)
     case code_426_upgradeRequired(response: T?)
     case code_429_awsTooManyRequests(response: T?)
@@ -32,6 +33,7 @@ public final class NetworkTask: Sendable {
       case NetworkResponseCode.notFound.code:                   self = .code_404_notFound(response: response)
       case NetworkResponseCode.notAcceptable.code:              self = .code_406_notAcceptable(response: response)
       case NetworkResponseCode.conflict.code:                   self = .code_409_conflict(response: response)
+      case NetworkResponseCode.locked.code:                     self = .code_423_locked(response: response)
       case NetworkResponseCode.failedDependency.code:           self = .code_424_failedDependency(response: response)
       case NetworkResponseCode.upgradeRequired.code:            self = .code_426_upgradeRequired(response: response)
       case NetworkResponseCode.aws_tooManyRequests.code:        self = .code_429_awsTooManyRequests(response: response)
@@ -49,6 +51,7 @@ public final class NetworkTask: Sendable {
       case .code_404_notFound(let response):                    return "404: \(String(describing: response))"
       case .code_406_notAcceptable(let response):               return "406: \(String(describing: response))"
       case .code_409_conflict(let response):                    return "409: \(String(describing: response))"
+      case .code_423_locked(let response):                      return "423: \(String(describing: response))"
       case .code_424_failedDependency(let response):            return "424: \(String(describing: response))"
       case .code_426_upgradeRequired(response: let response):   return "426: \(String(describing: response))"
       case .code_429_awsTooManyRequests(let response):          return "429: \(String(describing: response))"
@@ -65,6 +68,7 @@ public final class NetworkTask: Sendable {
       case (.code_404_notFound(let l),            .code_404_notFound(let r)):               return l == r
       case (.code_406_notAcceptable(let l),       .code_406_notAcceptable(let r)):          return l == r
       case (.code_409_conflict(let l),            .code_409_conflict(let r)):               return l == r
+      case (.code_423_locked(let l),              .code_423_locked(let r)):                 return l == r
       case (.code_424_failedDependency(let l),    .code_424_failedDependency(let r)):       return l == r
       case (.code_426_upgradeRequired(let l),     .code_426_upgradeRequired(let r)):        return l == r
       case (.code_429_awsTooManyRequests(let l),  .code_429_awsTooManyRequests(let r)):     return l == r
